@@ -33,6 +33,7 @@ $(document).ready(function() {
             duration: 100
         });
 
+        $(".panel-title").stop();
         $(".panel-title").animate({
             left: "-50%",
             opacity: "0"
@@ -40,6 +41,7 @@ $(document).ready(function() {
             duration: 800
         });
 
+        $(".text-container").stop();
         $(".text-container").animate({
             left: "25%",
             opacity: "0"
