@@ -1,127 +1,244 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <title>Portfolio</title>
-    <link rel = "stylesheet" href = "static/index.css">
-  </head>
+    <head>
+        <title>Portfolio</title>
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/1.19.1/TweenMax.min.js"></script>
+        <link rel = "stylesheet" href = "static/index.css">
+        <script src = "static/index.js"></script>
+    </head>
   <body>
     <div class = "header" id = "header">
-      <a href = "#home">HOME</a>
-      <a href = "#about">ABOUT</a>
-      <a href = "#skills">SKILLS</a>
-      <a href = "#header" id = "menu">MENU</a>
+        <a class = "homeButton">HOME</a>
+        <a class = "aboutButton">ABOUT</a>
+        <a class = "skillsButton">SKILLS</a>
+        <a class = "projectsButton">PROJECTS</a>
     </div>
-    <div class = "container">
-      <div class = "welcome" id = "home">
-        <img src = "static/img/home.png">
-        <div class = "welcome-text">
-          <span class = "line1">BENEDICT LEUNG</span>
-          <span class = "line2">Third Year Computer Science Student</span>
-        </div>
-        <a id = "learn" href = "#about">Learn more about me</a>
-      </div>
 
-      <div class = "content">
-        <div class = "hr" ><hr></div>
-        <div class = "about" id = "about">
-            <h2>About Me</h2>
-            <p>Hi! My name is Benedict, but you can call me Ben for short. I am a computer science student at Ontario Tech University.</p>
-            <p>When I was young, around third grade, I was passionate about being an inventor in the sense that you could make something that has never been made before and use that to help people who aren't capable or able to do a specific task. But that morphed into something different when I was exposed to computer programming. I was amused by how you could put your heart and soul into a program and would do exactly what you envisioned. What I mean about "heart and soul" is your legacy can be imprinted into your programs for generations to come. My desired legacy is to help people around the world specifically for people who need it, for example, curing the blind, helping second-language speakers and etc. Now I know these examples seem far ways, but someone needs to take the first step closer to these so-called "dreams" even if no one is willing to do it.  </p>
+    <svg version="1.1" id="loader">
+        <defs>
+            <filter id="goo">
+                <feGaussianBlur in="SourceGraphic" result="blur" stdDeviation="10" />
+                <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" result="goo" />
+                <feBlend in2="goo" in="SourceGraphic" result="mix" />
+            </filter>
+            <linearGradient id="MyGradient">
+                <stop offset="5%"  stop-color="#6F2232"/>
+                <stop offset="40%" stop-color="#a3225c"/>
+                <stop offset="100%" stop-color="#e24926"/>
+            </linearGradient>
+        </defs>
+        <mask id="maska">
+            <g class="blobs">
+                <circle class="blob" fill="white" cx="20%" cy="5%" r="7%" transform="rotate(0) translate(0, 0) rotate(0)"/>
+                <circle class="blob" fill="white" cx="15%" cy="35%" r="12%" transform="rotate(0) translate(0, 0) rotate(0)"/>
+                <circle class="blob" fill="white" cx="2%" cy="40%" r="5%" transform="rotate(0) translate(0, 0) rotate(0)"/>
+                <circle class="blob" fill="white" cx="25%" cy="20%" r="8%" transform="rotate(0) translate(0, 0) rotate(0)"/>
+                <circle class="blob" fill="white" cx="15%" cy="50%" r="5%" transform="rotate(0) translate(0, 0) rotate(0)"/>
+            </g>
+        </mask>
+        <rect mask="url(#maska)" fill="url(#MyGradient)" width="100%" height="100%">
+    </svg>
+
+    <div class = "navigation">
+        <hr style = "width: 50%" class = "welcomeButton">
+        <hr class = "aboutButton">
+        <hr class = "skillsButton">
+        <hr class = "projectsButton">
+    </div>
+
+    <div class = "container">
+        <div class = "welcome">
+            <div class = "welcome-text">
+                <span class = "line1">BENEDICT LEUNG</span>
+                <span class = "line2">Third Year Computer Science Student</span>
+            </div>
+            <a id = "learn">Learn more about me</a>
         </div>
-        <div class = "hr" ><hr></div>
-        <div class = "skills" id = "skills">
-          <h2>My skills</h2>
-          <div class = "skill">
-            <img src = "static/img/java.jpg">
-            <div class = "skill-overlay">
-                <div>
-                    <span class = "info">
-                        <h3>Java</h3>
-                    </span>
-                    <span class = "info">
-                        <img src = "static/img/javaswing.jpg">Java Swing
-                    </span>
-                    <span class = "info">
-                        <img src = "static/img/javafx.png">JavaFX
-                    </span>
-                    <span class = "info">
-                        <img src = "static/img/javasocket.png">Sockets
-                    </span>
-                  </div>
+
+        <div class = "content">
+            <div class = "about">
+                <div class = "panel-title">ABOUT ME</div>
+                <div class = "text-container">
+                    <p>Hi! My name is Benedict, but you can call me Ben for short. I am a computer science student at Ontario Tech University.</p>
+                    <p>When I was young, around third grade, I was passionate about being an inventor in the sense that you could make something that has never been made before and use that to help people who aren't capable or able to do a specific task. But that morphed into something different when I was exposed to computer programming. I was amused by how you could put your heart and soul into a program and would do exactly what you envisioned. What I mean about "heart and soul" is your legacy can be imprinted into your programs for generations to come. My desired legacy is to help people around the world specifically for people who need it, for example, curing the blind, helping second-language speakers and etc. Now I know these examples seem far ways, but someone needs to take the first step closer to these so-called "dreams" even if no one is willing to do it.  </p>
+                </div>
             </div>
-            Hover for more info
-          </div>
-          <div class = "skill">
-            <img src = "static/img/python.png">
-            <div class = "skill-overlay">
-              <div>
-                <span class = "info">
-                    <h3>Python</h3>
-                </span>
-                <span class = "info">
-                    <img src = "static/img/numpy.png">NumPy, Matlab
-                </span>
-                <span class = "info">
-                    <img src = "static/img/flask.png">Flask, SQLAlchemy
-                </span>
-              </div>
+
+            <div class = "skills">
+                <div class = "panel-title">MY SKILLS</div>
+                <div class = "text-container">
+                    <div class = "skill">
+                        <img src = "static/img/java.jpg">
+                        <div class = "skill-overlay">
+                            <div>
+                                <span class = "info">
+                                    <h3>Java</h3>
+                                </span>
+                                <span class = "info">
+                                    <img src = "static/img/javaswing.jpg">Java Swing
+                                </span>
+                                <span class = "info">
+                                    <img src = "static/img/javafx.png">JavaFX
+                                </span>
+                                <span class = "info">
+                                    <img src = "static/img/javasocket.png">Sockets
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class = "skill">
+                        <img src = "static/img/python.png">
+                        <div class = "skill-overlay">
+                            <div>
+                                <span class = "info">
+                                    <h3>Python</h3>
+                                </span>
+                                <span class = "info">
+                                    <img src = "static/img/numpy.png">NumPy, Matlab
+                                </span>
+                                <span class = "info">
+                                    <img src = "static/img/flask.png">Flask, SQLAlchemy
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class = "skill">
+                        <img src = "static/img/web.jpg">
+                        <div class = "skill-overlay">
+                            <div>
+                                <span class = "info">
+                                    <h3>Web Application</h3>
+                                </span>
+                                <span class = "info">
+                                    <img src = "static/img/web.jpg">HTML, CSS, Javascript, jQuery
+                                </span>
+                                <span class = "info">
+                                    <img src = "static/img/nodejs.jpg">Node.js, Three.js
+                                </span>
+                                <span class = "info">
+                                    <img src = "static/img/flask.png">Flask
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class = "skill">
+                        <img src = "static/img/c.png">
+                        <div class = "skill-overlay">
+                            <div>
+                                <span class = "info">
+                                    <h3>C programming language</h3>
+                                </span>
+                                <span class = "info">
+                                    <img src = "static/img/c.png">C
+                                </span>
+                                <span class = "info">
+                                    <img src = "static/img/c++.jpg">C++
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class = "skill">
+                        <img src = "static/img/lisp.png">
+                        <div class = "skill-overlay">
+                            <div>
+                                <span class = "info">
+                                    <h3>Functional programming language</h3>
+                                </span>
+                                <span class = "info">
+                                    <img src = "static/img/clojure.png">Clojure
+                                </span>
+                                <span class = "info">
+                                    <img src = "static/img/scala.png">Scala
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            Hover for more info
-          </div>
-          <div class = "skill">
-            <img src = "static/img/web.jpg">
-            <div class = "skill-overlay">
-              <div>
-                <span class = "info">
-                    <h3>Web Application</h3>
-                </span>
-                <span class = "info">
-                    <img src = "static/img/web.jpg">HTML, CSS, Javascript, jQuery
-                </span>
-                <span class = "info">
-                    <img src = "static/img/nodejs.jpg">Node.js, Three.js
-                </span>
-                <span class = "info">
-                    <img src = "static/img/flask.png">Flask
-                </span>
-              </div>
+
+            <div class = "projects">
+                <div class = "panel-title">PROJECTS <p>More repos <a href = "https://github.com/Benedict-Leung?tab=repositories" target = "_blank">here</a></p></div>
+                <div class = "text-container">
+                    <div class = "skill">
+                        <img src = "https://github.com/Benedict-Leung/Megaman-animation/blob/main/Megaman.png?raw=true">
+                        <div class = "skill-overlay">
+                            <div>
+                                <span class = "info">
+                                    <h3><a href = "https://github.com/Benedict-Leung/Megaman-animation" target = "_blank">Megaman Animation</a></h3>
+                                </span>
+                                <span class = "info">
+                                    <p>
+                                        A simple animation using Java Swing. The animation consists of sprites that can be controlled by the keyboard.
+                                    </p>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class = "skill">
+                        <img src = "https://github.com/Benedict-Leung/Java-Photoshop/blob/main/Photoshop.png?raw=true">
+                        <div class = "skill-overlay">
+                            <div>
+                                <span class = "info">
+                                    <h3><a href = "https://github.com/Benedict-Leung/Java-Photoshop" target = "_blank">Photoshop</a></h3>
+                                </span>
+                                <span class = "info">
+                                    <p>Mocks the basic features of Photoshop using Java Swing. You can apply filters and paint/draw on the image.</p>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class = "skill">
+                        <img src = "https://github.com/Benedict-Leung/Javmos/blob/main/Javmos.png?raw=true">
+                        <div class = "skill-overlay">
+                            <div>
+                                <span class = "info">
+                                    <h3><a href = "https://github.com/Benedict-Leung/Javmos" target = "_blank">Javmos</a></h3>
+                                </span>
+                                <span class = "info">
+                                    <p>Mocks the basic features of Desmos using Java Swing. You can plot simple functions (trignometric, logarithmic and polynomials) and shows roots, critical points and inflection points.</p>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class = "skill">
+                        <img src = "https://github.com/Benedict-Leung/Instagram-Mock/blob/master/Instagram.png?raw=true">
+                        <div class = "skill-overlay">
+                            <div>
+                                <span class = "info">
+                                    <h3><a href = "https://github.com/Benedict-Leung/Instagram-Mock" target = "_blank">Instagram Mock</a></h3>
+                                </span>
+                                <span class = "info">
+                                    <p>Mocks the basic features of Instagram using Flask and SQLAlchemy. Able to create accounts and post pictures via upload or camera. Afterwards, you can comment and like posts. You can also follow accounts to view other posts on your feed.</p>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class = "skill">
+                        <img src = "https://github.com/Benedict-Leung/GameBlog/blob/main/public/images/Slide2.png?raw=true">
+                        <div class = "skill-overlay">
+                            <div>
+                                <span class = "info">
+                                    <h3><a href = "https://github.com/Benedict-Leung/GameBlog" target = "_blank">Game Blog</a></h3>
+                                </span>
+                                <span class = "info">
+                                    <p>A blog where you can talk about the game using Node.js. The game is a free-for-all game where you shoot other players for points which is made with Three.js.
+
+                                    </p>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            Hover for more info
-          </div>
-          <div class = "skill">
-            <img src = "static/img/c.png">
-            <div class = "skill-overlay">
-              <div>
-                <span class = "info">
-                    <h3>C programming language</h3>
-                </span>
-                <span class = "info">
-                    <img src = "static/img/c.png">C
-                </span>
-                <span class = "info">
-                    <img src = "static/img/c++.jpg">C++
-                </span>
-              </div>
-            </div>
-            Hover for more info
-          </div>
-          <div class = "skill">
-            <img src = "static/img/lisp.png">
-            <div class = "skill-overlay">
-              <div>
-                <span class = "info">
-                    <h3>Functional programming language</h3>
-                </span>
-                <span class = "info">
-                    <img src = "static/img/clojure.png">Clojure
-                </span>
-                <span class = "info">
-                    <img src = "static/img/scala.png">Scala
-                </span>
-              </div>
-            </div>
-            Hover for more info
-          </div>
         </div>
-  </body>
+    </body>
 </html>
