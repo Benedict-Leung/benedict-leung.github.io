@@ -81,7 +81,7 @@ $(document).ready(function() {
         }
     }
 
-    $(".homeButton").click(() => {
+    $(".welcomeButton").click(() => {
         currentPanel = 0;
         activateHR();
 
@@ -143,8 +143,8 @@ $(document).ready(function() {
                 }, {
                     duration: 100,
                     complete: function() {
-                        run = false;
-                    }
+                        setTimeout(() => run = false, 700);
+                    }                
                 });
             }
         }
