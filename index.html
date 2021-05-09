@@ -4,6 +4,12 @@
         <title>Portfolio</title>
         <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/1.19.1/TweenMax.min.js"></script>
+        <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/emailjs-com@2/dist/email.min.js"></script>
+        <script type="text/javascript">
+            (function() {
+            emailjs.init("user_MSUyTPvHZPGetGPOHxZWz");
+            })();
+        </script>
         <link rel = "stylesheet" href = "static/index.css">
         <script src = "static/index.js"></script>
     </head>
@@ -13,9 +19,10 @@
         <a class = "aboutButton">ABOUT</a>
         <a class = "skillsButton">SKILLS</a>
         <a class = "projectsButton">PROJECTS</a>
+        <a class = "contactButton">CONTACT</a>
     </div>
 
-    <svg version="1.1" id="loader">
+    <svg xmlns="http://www.w3.org/2000/svg" id="loader">
         <defs>
             <filter id="goo">
                 <feGaussianBlur in="SourceGraphic" result="blur" stdDeviation="10" />
@@ -30,11 +37,11 @@
         </defs>
         <mask id="maska">
             <g class="blobs">
-                <circle class="blob" fill="white" cx="20%" cy="5%" r="7%" transform="rotate(0) translate(0, 0) rotate(0)"/>
-                <circle class="blob" fill="white" cx="15%" cy="35%" r="12%" transform="rotate(0) translate(0, 0) rotate(0)"/>
-                <circle class="blob" fill="white" cx="2%" cy="40%" r="5%" transform="rotate(0) translate(0, 0) rotate(0)"/>
-                <circle class="blob" fill="white" cx="25%" cy="20%" r="8%" transform="rotate(0) translate(0, 0) rotate(0)"/>
-                <circle class="blob" fill="white" cx="15%" cy="50%" r="5%" transform="rotate(0) translate(0, 0) rotate(0)"/>
+                <circle class="blob" fill="white" cx="300" cy="50" r="70" transform="rotate(0) translate(0, 0) rotate(0)"/>
+                <circle class="blob" fill="white" cx="230" cy="300" r="150" transform="rotate(0) translate(0, 0) rotate(0)"/>
+                <circle class="blob" fill="white" cx="50" cy="300" r="60" transform="rotate(0) translate(0, 0) rotate(0)"/>
+                <circle class="blob" fill="white" cx="400" cy="170" r="100" transform="rotate(0) translate(0, 0) rotate(0)"/>
+                <circle class="blob" fill="white" cx="200" cy="480" r="60" transform="rotate(0) translate(0, 0) rotate(0)"/>
             </g>
         </mask>
         <rect mask="url(#maska)" fill="url(#MyGradient)" width="100%" height="100%">
@@ -45,10 +52,11 @@
         <hr class = "aboutButton">
         <hr class = "skillsButton">
         <hr class = "projectsButton">
+        <hr class = "contactButton">
     </div>
 
     <div class = "container">
-        <div class = "welcome">
+        <div class = "welcome panel">
             <div class = "welcome-text">
                 <span class = "line1">BENEDICT LEUNG</span>
                 <span class = "line2">Third Year Computer Science Student</span>
@@ -57,7 +65,7 @@
         </div>
 
         <div class = "content">
-            <div class = "about">
+            <div class = "about panel">
                 <div class = "panel-title">ABOUT ME</div>
                 <div class = "text-container">
                     <p>Hi! My name is Benedict, but you can call me Ben for short. I am a computer science student at Ontario Tech University.</p>
@@ -65,7 +73,7 @@
                 </div>
             </div>
 
-            <div class = "skills">
+            <div class = "skills panel">
                 <div class = "panel-title">MY SKILLS</div>
                 <div class = "text-container">
                     <div class = "skill">
@@ -161,7 +169,7 @@
                 </div>
             </div>
 
-            <div class = "projects">
+            <div class = "projects panel">
                 <div class = "panel-title">PROJECTS <p>More repos <a href = "https://github.com/Benedict-Leung?tab=repositories" target = "_blank">here</a></p></div>
                 <div class = "text-container">
                     <div class = "skill">
@@ -237,6 +245,27 @@
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <div class = "contact panel">
+                <div class = "panel-title">CONTACT ME<p>Thanks for visiting!</p></div>
+                <div class = "text-container">
+                    <form class="form" id="contact-form">
+                        <div class="form-info">
+                            <input id="name" name="user_name" type="text" placeholder=" " required="">
+                            <label for="name">Name</label>
+                        </div>
+                        <div class="form-info">
+                            <input id="email" name="user_email" type="email" placeholder=" " required="">
+                            <label for="email">Email</label>
+                        </div>
+                        <div class="form-info">
+                            <textarea id="message" name="message" rows="15" cols="50" required=""></textarea>
+                            <label for="message">Message</label>
+                        </div>
+                        <input type="submit" value="Send" class="button">
+                    </form>
                 </div>
             </div>
         </div>

@@ -33,7 +33,7 @@ $(document).ready(function() {
             duration: 100
         });
 
-        $(".panel-title").stop();
+        $(".panel-title").stop(true, false);
         $(".panel-title").animate({
             left: "-50%",
             opacity: "0"
@@ -41,7 +41,7 @@ $(document).ready(function() {
             duration: 800
         });
 
-        $(".text-container").stop();
+        $(".text-container").stop(true, false);
         $(".text-container").animate({
             left: "25%",
             opacity: "0"
@@ -53,7 +53,7 @@ $(document).ready(function() {
     function activateHR() {
         if (previousPanel != currentPanel) {
             resetHR();
-            let names = ["welcome", "about", "skills", "projects"];
+            let names = ["welcome", "about", "skills", "projects", "contact"];
     
             $("hr." + names[currentPanel] + "Button").animate({
                 width: "50%"
@@ -62,8 +62,8 @@ $(document).ready(function() {
             });
             previousPanel = currentPanel;
 
-            $("." + names[currentPanel] + " .panel-title").stop();
-            $("." + names[currentPanel] + " .text-container").stop();
+            $("." + names[currentPanel] + " .panel-title").stop(true, false);
+            $("." + names[currentPanel] + " .text-container").stop(true, false);
 
             $("." + names[currentPanel] + " .panel-title").animate({
                 left: "0",
@@ -78,75 +78,102 @@ $(document).ready(function() {
             }, {
                 duration: 800
             });
+            
+            scrollPanel();
         }
+    }
+
+    function scrollPanel() {
+        if (!run) {
+            run = true;
+            $(".container").animate({
+                scrollTop: $(window).height() * currentPanel
+            }, {
+                duration: 100,
+                complete: function() {
+                    setTimeout(() => run = false, 700);
+                } 
+            });
+        }
+    }
+
+    function slideDown() {
+        currentPanel = Math.min(4, currentPanel + 1);
+        activateHR();
+    }
+
+    function slideUp() {
+        currentPanel = Math.max(0, currentPanel - 1);
+        activateHR();
     }
 
     $(".welcomeButton").click(() => {
         currentPanel = 0;
         activateHR();
-
-        $(".container").animate({
-            scrollTop: 0
-        }, {
-            duration: 100
-        });
     });
 
     $(".aboutButton").add("#learn").click(() => {
         currentPanel = 1;
         activateHR();
-        
-        $(".container").animate({
-            scrollTop: window.innerHeight
-        }, {
-            duration: 100
-        });
     });
 
     $(".skillsButton").click(() => {
         currentPanel = 2;
         activateHR();
-        
-        $(".container").animate({
-            scrollTop: window.innerHeight * 2
-        }, {
-            duration: 100
-        });
     });
 
     $(".projectsButton").click(() => {
         currentPanel = 3;
         activateHR();
-        
-        $(".container").animate({
-            scrollTop: window.innerHeight * 3
-        }, {
-            duration: 100
-        });
+    });
+
+    $(".contactButton").click(() => {
+        currentPanel = 4;
+        activateHR();
     });
     
 
-    $(".container").on("mousewheel touchmove",
+    $(".container").on("mousewheel",
         function(e) {
             e.preventDefault();
-            if (!run) {
-                if (e.originalEvent.deltaY > 0) {
-                    currentPanel = Math.min(3, currentPanel + 1);
-                } else {
-                    currentPanel = Math.max(0, currentPanel - 1);
-                }
-                activateHR();
-
-                run = true;
-                $(".container").animate({
-                    scrollTop: currentPanel * window.innerHeight
-                }, {
-                    duration: 100,
-                    complete: function() {
-                        setTimeout(() => run = false, 700);
-                    }                
-                });
+            
+            if (e.originalEvent.deltaY > 0) {
+                slideDown();
+            } else {
+                slideUp();
             }
         }
     );
+
+    var ts;
+    $(".container").bind('touchstart', function(e) {
+        e.preventDefault();
+        ts = e.originalEvent.touches[0].clientY;
+    });
+
+    $(".container").bind('touchend', function(e) {
+        e.preventDefault();
+        var te = e.originalEvent.changedTouches[0].clientY;
+
+        if (ts > te + 100) {
+            slideDown();
+        } else if (ts < te - 100) {
+            slideUp()
+        }
+    });
+
+    $(window).on('resize', function() {
+        $(".container").scrollTop(window.innerHeight * currentPanel);
+    });
+
+    $(".form").on("submit", function(e) {
+        e.preventDefault();
+        emailjs.sendForm('service_ls3c1xa', 'template_46yhkvp', this)
+        .then(function(response) {
+            alert("Thanks for you message!");
+        }, function(error) {
+            alert("Something went wrong...");
+        });
+        $(".form")[0].reset();
+    });
 });
