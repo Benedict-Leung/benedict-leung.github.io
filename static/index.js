@@ -84,17 +84,14 @@ $(document).ready(function() {
     }
 
     function scrollPanel() {
-        if (!run) {
-            run = true;
-            $(".container").animate({
-                scrollTop: $(window).height() * currentPanel
-            }, {
-                duration: 100,
-                complete: function() {
-                    setTimeout(() => run = false, 700);
-                } 
-            });
-        }
+        $(".container").animate({
+            scrollTop: $(window).height() * currentPanel
+        }, {
+            duration: 100,
+            complete: function() {
+                setTimeout(() => run = false, 700);
+            } 
+        });
     }
 
     function slideDown() {
@@ -136,11 +133,13 @@ $(document).ready(function() {
     $(".container").on("mousewheel",
         function(e) {
             e.preventDefault();
-            
-            if (e.originalEvent.deltaY > 0) {
-                slideDown();
-            } else {
-                slideUp();
+            if (!run) {
+                run = true;
+                if (e.originalEvent.deltaY > 0) {
+                    slideDown();
+                } else {
+                    slideUp();
+                }
             }
         }
     );
@@ -154,11 +153,13 @@ $(document).ready(function() {
     $(".container").bind('touchend', function(e) {
         e.preventDefault();
         var te = e.originalEvent.changedTouches[0].clientY;
-
-        if (ts > te + 100) {
-            slideDown();
-        } else if (ts < te - 100) {
-            slideUp()
+        if (!run) {
+            run = true;
+            if (ts > te + 100) {
+                slideDown();
+            } else if (ts < te - 100) {
+                slideUp()
+            }
         }
     });
 
