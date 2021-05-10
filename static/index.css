@@ -300,7 +300,6 @@ p {
     position: absolute;
     text-align: center;
     font: 1vw "Fjalla One";
-    border-radius: 50%;
     transition: all 1s ease-in-out 800ms;
 }
 
@@ -344,6 +343,7 @@ p {
     border-radius: 50%;
     transition: opacity 0.3s;
     user-select: text;
+    overflow: hidden;
 }
 
 .skill-overlay:hover, .skill-overlay.hover {
@@ -351,8 +351,11 @@ p {
 }
 
 .skill-overlay div {
+    width: 100%;
+    height: 100%;
     padding: 1vw;
     padding-left: 15%;
+    padding-right: 15%;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -379,8 +382,7 @@ p {
 
 .info {
     width: 100%;
-    left: -5%;
-    line-height: 2rem;
+    line-height: 1.5em;
     display: flex;
     align-items: center;
     position: relative;
