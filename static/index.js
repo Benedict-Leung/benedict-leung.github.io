@@ -27,6 +27,8 @@ $(document).ready(function() {
     let run = false;
 
     function resetHR() {
+        $(".skill").css("transform", "");
+        
         $("hr").animate({
             width: "25%"
         }, {
@@ -51,9 +53,10 @@ $(document).ready(function() {
     }
 
     function activateHR() {
+        let names = ["welcome", "about", "skills", "projects", "contact"];
+
         if (previousPanel != currentPanel) {
             resetHR();
-            let names = ["welcome", "about", "skills", "projects", "contact"];
     
             $("hr." + names[currentPanel] + "Button").animate({
                 width: "50%"
@@ -62,30 +65,47 @@ $(document).ready(function() {
             });
             previousPanel = currentPanel;
 
-            $("." + names[currentPanel] + " .panel-title").stop(true, false);
-            $("." + names[currentPanel] + " .text-container").stop(true, false);
+            if (currentPanel != 2 && currentPanel != 3) {
+                $("." + names[currentPanel] + " .panel-title").stop(true, false);
+                $("." + names[currentPanel] + " .text-container").stop(true, false);
 
-            $("." + names[currentPanel] + " .panel-title").animate({
-                left: "0",
-                opacity: "1"
-            }, {
-                duration: 800
-            });
+                $("." + names[currentPanel] + " .panel-title").animate({
+                    left: "0",
+                    opacity: "1"
+                }, {
+                    duration: 800
+                });
 
-            $("." + names[currentPanel] + " .text-container").delay(800).animate({
-                left: "50%",
-                opacity: "1"
-            }, {
-                duration: 800
-            });
+                $("." + names[currentPanel] + " .text-container").delay(800).animate({
+                    left: "50%",
+                    opacity: "1"
+                }, {
+                    duration: 800
+                });
+            } else {
+                let elements = $("." + names[currentPanel] + ".panel .skill");
+                let r = Math.min(window.innerHeight, window.innerWidth) / 3 + "px";
+                let start = -90;
+                let length = elements.length;
+                let sliceOffset = 360 / length;
             
+                elements.each(function (i) {
+                    let angle = sliceOffset * i + start;
+                    let reverseRotate = -angle;
+            
+                    $(this).css({
+                        'transform': 'rotate(' + angle + 'deg) translate(' + r + ') rotate(' + reverseRotate + 'deg)'
+                    });
+            
+                })
+            }
             scrollPanel();
         }
     }
 
     function scrollPanel() {
         $(".container").animate({
-            scrollTop: $(window).height() * currentPanel
+            scrollTop: $(window).innerHeight() * currentPanel
         }, {
             duration: 100,
             complete: function() {
@@ -130,14 +150,15 @@ $(document).ready(function() {
     });
     
 
-    $(".container").on("mousewheel",
-        function(e) {
+    $(".container").on("mousewheel", function(e) {
             e.preventDefault();
             if (!run) {
                 run = true;
                 if (e.originalEvent.deltaY > 0) {
+                    run = true;
                     slideDown();
                 } else {
+                    run = true;
                     slideUp();
                 }
             }
@@ -154,17 +175,22 @@ $(document).ready(function() {
         e.preventDefault();
         var te = e.originalEvent.changedTouches[0].clientY;
         if (!run) {
-            run = true;
             if (ts > te + 100) {
+                run = true;
                 slideDown();
             } else if (ts < te - 100) {
+                run = true;
                 slideUp()
+            } else {
+                $(".skill-overlay").removeClass("hover");
+                $($(e.target).parents(".skill-overlay")[0]).addClass("hover");
             }
         }
     });
 
     $(window).on('resize', function() {
         $(".container").scrollTop(window.innerHeight * currentPanel);
+        $(".skill-overlay").removeClass("hover");
     });
 
     $(".form").on("submit", function(e) {

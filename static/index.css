@@ -232,6 +232,7 @@ p {
 
 .panel-title {
     width: 50%;
+    height: 100vh;
     position: absolute;
     left: -50%;
     opacity: 0;
@@ -247,9 +248,20 @@ p {
     color: #C3073F;
 }
 
+.center-title {
+    text-align: center;
+    color: #C3073F;
+    font-size: 5vw;
+}
+
 .text-container {
     width: 50%;
+    height: 100vh;
     position: absolute;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
     left: 25%;
     opacity: 0;
 }
@@ -257,15 +269,24 @@ p {
 .panel {
     width: 100%;
     height: 100vh;
+    height: calc(var(--vh, 1vh) * 100);
     display: flex;
     justify-content: space-between;
     align-items: center;
     position: relative;
 }
 
+.content-container {
+    width: 100%;
+    height: 100vh;
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
 
 /*CSS for course skills section*/
-.skills .text-container,  .projects .text-container{
+.skills .text-container,  .projects .text-container {
     display: flex;
     justify-content: center;
     align-items: center;
@@ -276,10 +297,11 @@ p {
     width: auto;
     height: auto;
     margin: 1vw 1vw;
-    position: relative;
+    position: absolute;
     text-align: center;
     font: 1vw "Fjalla One";
     border-radius: 50%;
+    transition: all 1s ease-in-out 800ms;
 }
 
 .skill img {
@@ -324,7 +346,7 @@ p {
     user-select: text;
 }
 
-.skill-overlay:hover {
+.skill-overlay:hover, .skill-overlay.hover {
     opacity: 0.95;
 }
 
@@ -342,7 +364,7 @@ p {
     margin: 0;
 }
 
-.skill-overlay a {
+.panel a {
     color: #C3073F;
 }
 
@@ -367,7 +389,6 @@ p {
 
 .form {
     width: 100%;
-    height: 100%;
     position: relative;
     display: flex;
     flex-direction: column;
