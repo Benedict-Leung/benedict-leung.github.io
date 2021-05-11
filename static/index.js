@@ -105,7 +105,7 @@ $(document).ready(function() {
 
     function scrollPanel() {
         $(".container").animate({
-            scrollTop: $(window).innerHeight() * currentPanel
+            scrollTop: window.visualViewport.height * currentPanel
         }, {
             duration: 100,
             complete: function() {
