@@ -12,7 +12,7 @@
 }
 
 html {
-  height: -webkit-fill-available;
+    height: -webkit-fill-available;
 }
 
 body {
@@ -216,7 +216,7 @@ p {
     transition: 0.2s background-color linear, 0.2s color linear;
 }
 
-.welcome #learn:hover {
+.welcome #learn:hover, .welcome #learn.hover {
     color: #000;
     background: #FFF;
     transition: 0.2s background-color linear, 0.2s color linear;
@@ -313,8 +313,8 @@ p {
 }
 
 .skill img {
-    width: 18vw;
-    height: 18vw;
+    width: 18rem;
+    height: 18rem;
     object-fit: cover;
     display: block;
     margin-bottom: 1vh;
@@ -323,8 +323,8 @@ p {
 }
 
 .skill:after {
-    width: 18.4vw;
-    height: 18.4vw;
+    width: 18.4rem;
+    height: 18.4rem;
     content: "";
     position: absolute;
     top: -0.2vw;
@@ -336,8 +336,8 @@ p {
 }
 
 .skill-overlay {
-    width: 18vw;
-    height: 18vw;
+    width: 18rem;
+    height: 18rem;
     display: flex;
     align-items: center;
     position: absolute;

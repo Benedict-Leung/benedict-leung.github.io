@@ -1,11 +1,11 @@
 $(document).ready(function() {   
     var radius = 8;
-    TweenMax.staggerFromTo('.blob', 4 ,{
+    TweenMax.staggerFromTo(".blob", 4 ,{
       cycle: {
         attr:function(i) {
           var r = i*90;
           return {
-            transform:'rotate('+r+') translate('+radius+',0.1) rotate('+(-r)+')'
+            transform:"rotate("+r+") translate("+radius+",0.1) rotate("+(-r)+")"
           }      
         }
       }  
@@ -14,7 +14,7 @@ $(document).ready(function() {
         attr:function(i) {
           var r = i*90+360;
           return {
-            transform:'rotate('+r+') translate('+radius+',0.1) rotate('+(-r)+')'
+            transform:"rotate("+r+") translate("+radius+",0.1) rotate("+(-r)+")"
           }      
         }
       },
@@ -94,7 +94,7 @@ $(document).ready(function() {
                     let reverseRotate = -angle;
             
                     $(this).css({
-                        'transform': 'rotate(' + angle + 'deg) translate(' + r + ') rotate(' + reverseRotate + 'deg)'
+                        "transform": "rotate(" + angle + "deg) translate(" + r + ") rotate(" + reverseRotate + "deg)"
                     });
             
                 })
@@ -166,12 +166,12 @@ $(document).ready(function() {
     );
 
     var ts;
-    $(".container").bind('touchstart', function(e) {
+    $(".container").bind("touchstart", function(e) {
         e.preventDefault();
         ts = e.originalEvent.touches[0].clientY;
     });
 
-    $(".container").bind('touchend', function(e) {
+    $(".container").bind("touchend", function(e) {
         e.preventDefault();
         var te = e.originalEvent.changedTouches[0].clientY;
         if (!run) {
@@ -184,18 +184,23 @@ $(document).ready(function() {
             } else {
                 $(".skill-overlay").removeClass("hover");
                 $($(e.target).parents(".skill-overlay")[0]).addClass("hover");
+
+                $(e.target)[0].click(function() {
+                    let labelID = $(this).attr("for");
+                    $("#"+labelID).trigger("click");
+                });
             }
         }
     });
 
-    $(window).on('resize', function() {
+    $(window).on("resize", function() {
         $(".container").scrollTop(window.innerHeight * currentPanel);
         $(".skill-overlay").removeClass("hover");
     });
 
     $(".form").on("submit", function(e) {
         e.preventDefault();
-        emailjs.sendForm('service_ls3c1xa', 'template_46yhkvp', this)
+        emailjs.sendForm("service_ls3c1xa", "template_46yhkvp", this)
         .then(function(response) {
             alert("Thanks for you message!");
         }, function(error) {
