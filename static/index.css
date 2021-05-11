@@ -7,19 +7,29 @@
     100% {opacity: 1;}
 }
 
-html, body {
+* {
+    box-sizing: border-box;
+}
+
+html {
+  height: -webkit-fill-available;
+}
+
+body {
     margin: 0;
     width: 100%;
-    height: 100%;
+    min-height: 100vh;
+    /* mobile viewport bug fix */
+    min-height: -webkit-fill-available;
     background-color: #1A1A1D;
     color: #FFF;
-    overflow: hidden;
     user-select: none;
     opacity: 0;
-    position: absolute;
+    overflow: hidden;
     animation: load 0.1s ease-in 0.2s 1;
     animation-fill-mode: forwards;
 }
+
 
 ::-webkit-scrollbar {
     display: none;
@@ -111,7 +121,9 @@ p {
 .navigation {
     width: 5%;
     height: 100vh;
-    height: calc(var(--vh, 1vh) * 100);
+    min-height: 100vh;
+    /* mobile viewport bug fix */
+    min-height: -webkit-fill-available;
     position: absolute;
     top: 0;
     left: 0;
@@ -132,11 +144,11 @@ p {
 
 .container {
     width: 100%;
-    height: 100vh;
-    height: calc(var(--vh, 1vh) * 100);
+    height: 100%;
+    min-height: 100vh;
+    /* mobile viewport bug fix */
+    min-height: -webkit-fill-available;
     position: absolute;
-    top: 0;
-    left: 0;
     overflow-x: hidden;
     overflow-y: auto;
     scroll-behavior: smooth;
@@ -220,16 +232,11 @@ p {
     border: 1px solid #FFF;
 }
 
-.content {
-    margin: 0 5vw;
-    font: 2vw "Fjalla One";
-}
-
-
 .panel {
     width: 100%;
-    height: 100vh;
-    height: calc(var(--vh, 1vh) * 100);
+    min-height: 100vh;
+    /* mobile viewport bug fix */
+    min-height: -webkit-fill-available;
     position: relative;
     display: flex;
     justify-content: center;
@@ -239,6 +246,8 @@ p {
 .panel-title {
     width: 50%;
     position: absolute;
+    padding-left: 1vw;
+    padding-right: 1vw;
     top: 50%;
     left: -50%;
     opacity: 0;
@@ -247,7 +256,7 @@ p {
     align-items: center;
     flex-direction: column;
     color: #C3073F;
-    font-size: 8vw;
+    font: 8vw "Fjalla One";
     transform: translate(0, -50%);
 }
 
@@ -258,13 +267,15 @@ p {
 .center-title {
     text-align: center;
     color: #C3073F;
-    font-size: 5vw;
+    font: 5vw "Fjalla One";
 }
 
 .text-container {
     width: 50%;
     top: 50%;
     position: absolute;
+    padding-left: 1vw;
+    padding-right: 1vw;
     display: flex;
     flex-direction: column;
     justify-content: center;
