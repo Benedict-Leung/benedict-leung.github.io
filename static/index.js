@@ -52,11 +52,12 @@ $(document).ready(function() {
         });
     }
 
-    function activateHR() {
+    function activateHR(resize = false) {
         let names = ["welcome", "about", "skills", "projects", "contact"];
 
-        if (previousPanel != currentPanel) {
-            resetHR();
+        if (previousPanel != currentPanel || resize) {
+            if (previousPanel != currentPanel)
+                resetHR();
     
             $("hr." + names[currentPanel] + "Button").animate({
                 width: "50%"
@@ -96,8 +97,7 @@ $(document).ready(function() {
                     $(this).css({
                         "transform": "rotate(" + angle + "deg) translate(" + r + ") rotate(" + reverseRotate + "deg)"
                     });
-            
-                })
+                });
             }
             scrollPanel();
         }
@@ -194,8 +194,8 @@ $(document).ready(function() {
     });
 
     $(window).on("resize", function() {
-        $(".container").scrollTop(window.innerHeight * currentPanel);
         $(".skill-overlay").removeClass("hover");
+        activateHR(true);
     });
 
     $(".form").on("submit", function(e) {

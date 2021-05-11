@@ -267,7 +267,7 @@ p {
 .center-title {
     text-align: center;
     color: #C3073F;
-    font: 5vw "Fjalla One";
+    font: min(5rem, 8vh) "Fjalla One";
 }
 
 .text-container {
@@ -313,8 +313,8 @@ p {
 }
 
 .skill img {
-    width: 18rem;
-    height: 18rem;
+    width: min(18rem, 30vh);
+    height: min(18rem, 30vh);
     object-fit: cover;
     display: block;
     margin-bottom: 1vh;
@@ -323,8 +323,8 @@ p {
 }
 
 .skill:after {
-    width: 18.4rem;
-    height: 18.4rem;
+    width: min(18.4rem, 31vh);
+    height: min(18.4rem, 31vh);
     content: "";
     position: absolute;
     top: -0.2vw;
@@ -336,8 +336,8 @@ p {
 }
 
 .skill-overlay {
-    width: 18rem;
-    height: 18rem;
+    width: min(18rem, 30vh);
+    height: min(18rem, 30vh);
     display: flex;
     align-items: center;
     position: absolute;
