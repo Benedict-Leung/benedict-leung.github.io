@@ -28,7 +28,7 @@ $(document).ready(function() {
 
     function resetHR() {
         $(".skill").css("transform", "");
-        $("input").add('textarea').blur();
+        $("input").add("textarea").blur();
         
         $("hr").animate({
             width: "25%"
@@ -169,31 +169,52 @@ $(document).ready(function() {
         }
     });
 
-    var ts;
+    let ts;
+    let multiTouch = false;
     $(".container").bind("touchstart", function(e) {
-        e.preventDefault()
-        ts = e.originalEvent.touches[0].clientY;
+        var scrollPosition = [
+            self.pageXOffset || document.documentElement.scrollLeft || document.body.scrollLeft,
+            self.pageYOffset || document.documentElement.scrollTop  || document.body.scrollTop
+        ];
+        var element = $(".container");
+        element.data("scroll-position", scrollPosition);
+        element.data("previous-overflow", element.css("overflow"));
+        element.css("overflow", "hidden");
+        window.scrollTo(scrollPosition[0], scrollPosition[1]);
+
+        if (e.touches.length == 1) {
+            multiTouch = false;
+            ts = e.originalEvent.touches[0].clientY;
+        } else {
+            multiTouch = true;
+        }
     });
 
     $(".container").bind("touchend", function(e) {
-        e.preventDefault()
-        var te = e.originalEvent.changedTouches[0].clientY;
+        if (!multiTouch) {
+            e.preventDefault()
+            var te = e.originalEvent.changedTouches[0].clientY;
+    
+            if (ts > te + 100) {
+                slideDown();
+            } else if (ts < te - 100) {
+                slideUp()
+            } else {
+                $(".skill-overlay").add("img").removeClass("hover");
+                $("input").add("textarea").blur();
+                $($(e.target).parents(".skill-overlay")[0]).addClass("hover");
 
-        if (ts > te + 100) {
-            slideDown();
-        } else if (ts < te - 100) {
-            slideUp()
-        } else {
-            $(".skill-overlay").add("img").removeClass("hover");
-            $("input").add('textarea').blur();
-            $($(e.target).parents(".skill-overlay")[0]).addClass("hover");
-            if ($(e.target).is("img"))
-                $(e.target).addClass("hover");
-
-            $(e.target)[0].click(function() {
-                let labelID = $(this).attr("for");
-                $("#"+labelID).trigger("click");
-            });
+                if ($(e.target).is("img"))
+                    $(e.target).addClass("hover");
+                
+                if ($(e.target).is("input") || $(e.target).is("textarea"))
+                    $(e.target).focus()
+    
+                $(e.target)[0].click(function() {
+                    let labelID = $(this).attr("for");
+                    $("#"+labelID).trigger("click");
+                });
+            }
         }
     });
 
