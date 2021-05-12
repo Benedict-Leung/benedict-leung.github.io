@@ -100,6 +100,8 @@ $(document).ready(function() {
                 });
             }
             scrollPanel();
+        } else {
+            run = false;
         }
     }
 
@@ -115,13 +117,20 @@ $(document).ready(function() {
     }
 
     function slideDown() {
-        currentPanel = Math.min(4, currentPanel + 1);
-        activateHR();
+        if (!run) {
+            run = true;
+            currentPanel = Math.min(4, currentPanel + 1);
+            activateHR();
+        }
+        
     }
 
     function slideUp() {
-        currentPanel = Math.max(0, currentPanel - 1);
-        activateHR();
+        if (!run) {
+            run = true;
+            currentPanel = Math.max(0, currentPanel - 1);
+            activateHR();
+        }
     }
 
     $(".welcomeButton").click(() => {
@@ -151,19 +160,13 @@ $(document).ready(function() {
     
 
     $(".container").on("mousewheel", function(e) {
-            e.preventDefault();
-            if (!run) {
-                run = true;
-                if (e.originalEvent.deltaY > 0) {
-                    run = true;
-                    slideDown();
-                } else {
-                    run = true;
-                    slideUp();
-                }
-            }
+        e.preventDefault();
+        if (e.originalEvent.deltaY > 0) {
+            slideDown();
+        } else {
+            slideUp();
         }
-    );
+    });
 
     var ts;
     $(".container").bind("touchstart", function(e) {
@@ -174,22 +177,19 @@ $(document).ready(function() {
     $(".container").bind("touchend", function(e) {
         e.preventDefault();
         var te = e.originalEvent.changedTouches[0].clientY;
-        if (!run) {
-            if (ts > te + 100) {
-                run = true;
-                slideDown();
-            } else if (ts < te - 100) {
-                run = true;
-                slideUp()
-            } else {
-                $(".skill-overlay").removeClass("hover");
-                $($(e.target).parents(".skill-overlay")[0]).addClass("hover");
 
-                $(e.target)[0].click(function() {
-                    let labelID = $(this).attr("for");
-                    $("#"+labelID).trigger("click");
-                });
-            }
+        if (ts > te + 100) {
+            slideDown();
+        } else if (ts < te - 100) {
+            slideUp()
+        } else {
+            $(".skill-overlay").removeClass("hover");
+            $($(e.target).parents(".skill-overlay")[0]).addClass("hover");
+
+            $(e.target)[0].click(function() {
+                let labelID = $(this).attr("for");
+                $("#"+labelID).trigger("click");
+            });
         }
     });
 
