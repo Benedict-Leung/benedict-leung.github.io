@@ -28,6 +28,7 @@ $(document).ready(function() {
 
     function resetHR() {
         $(".skill").css("transform", "");
+        $("input").add('textarea').blur();
         
         $("hr").animate({
             width: "25%"
@@ -107,7 +108,7 @@ $(document).ready(function() {
 
     function scrollPanel() {
         $(".container").animate({
-            scrollTop: window.visualViewport.height * currentPanel
+            scrollTop: window.innerHeight * currentPanel
         }, {
             duration: 100,
             complete: function() {
@@ -122,7 +123,6 @@ $(document).ready(function() {
             currentPanel = Math.min(4, currentPanel + 1);
             activateHR();
         }
-        
     }
 
     function slideUp() {
@@ -158,23 +158,25 @@ $(document).ready(function() {
         activateHR();
     });
     
-
     $(".container").on("mousewheel", function(e) {
-        e.preventDefault();
-        if (e.originalEvent.deltaY > 0) {
-            slideDown();
-        } else {
-            slideUp();
+        if (!e.ctrlKey) {
+            e.preventDefault();
+            if (e.originalEvent.deltaY > 50) {
+                slideDown();
+            } else if (e.originalEvent.deltaY < -50) {
+                slideUp();
+            }
         }
     });
 
     var ts;
     $(".container").bind("touchstart", function(e) {
-        e.preventDefault();
+        e.preventDefault()
         ts = e.originalEvent.touches[0].clientY;
     });
 
     $(".container").bind("touchend", function(e) {
+        e.preventDefault()
         var te = e.originalEvent.changedTouches[0].clientY;
 
         if (ts > te + 100) {
@@ -183,6 +185,7 @@ $(document).ready(function() {
             slideUp()
         } else {
             $(".skill-overlay").add("img").removeClass("hover");
+            $("input").add('textarea').blur();
             $($(e.target).parents(".skill-overlay")[0]).addClass("hover");
             if ($(e.target).is("img"))
                 $(e.target).addClass("hover");
@@ -203,7 +206,7 @@ $(document).ready(function() {
         e.preventDefault();
         emailjs.sendForm("service_ls3c1xa", "template_46yhkvp", this)
         .then(function(response) {
-            alert("Thanks for you message!");
+            alert("Thanks for your message!");
         }, function(error) {
             alert("Something went wrong...");
         });
