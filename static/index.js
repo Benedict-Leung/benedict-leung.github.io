@@ -175,7 +175,6 @@ $(document).ready(function() {
     });
 
     $(".container").bind("touchend", function(e) {
-        e.preventDefault();
         var te = e.originalEvent.changedTouches[0].clientY;
 
         if (ts > te + 100) {
@@ -183,8 +182,10 @@ $(document).ready(function() {
         } else if (ts < te - 100) {
             slideUp()
         } else {
-            $(".skill-overlay").removeClass("hover");
+            $(".skill-overlay").add("img").removeClass("hover");
             $($(e.target).parents(".skill-overlay")[0]).addClass("hover");
+            if ($(e.target).is("img"))
+                $(e.target).addClass("hover");
 
             $(e.target)[0].click(function() {
                 let labelID = $(this).attr("for");
@@ -194,7 +195,7 @@ $(document).ready(function() {
     });
 
     $(window).on("resize", function() {
-        $(".skill-overlay").removeClass("hover");
+        $(".skill-overlay").add("img").removeClass("hover");
         activateHR(true);
     });
 

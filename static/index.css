@@ -350,13 +350,14 @@ p {
     color: #C3073F;
     opacity: 0;
     border-radius: 50%;
-    transition: opacity 0.3s;
-    user-select: text;
+    pointer-events: none;
     overflow: hidden;
+    transition: opacity 0.3s, pointer-events 0s linear 0.3s;
 }
 
-.skill-overlay:hover, .skill-overlay.hover {
+.skill img:hover ~ .skill-overlay, .skill img.hover ~ .skill-overlay, .skill-overlay:hover {
     opacity: 0.95;
+    pointer-events: auto;
 }
 
 .skill-overlay div {
