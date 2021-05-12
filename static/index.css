@@ -52,7 +52,7 @@ h2 {
 }
 
 p {
-    font: 1vw "Raleway";
+    font: 1.2vmin "Raleway";
 }
 
 .header {
@@ -267,7 +267,7 @@ p {
 .center-title {
     text-align: center;
     color: #C3073F;
-    font: min(5rem, 8vh) "Fjalla One";
+    font: 8vmin "Fjalla One";
 }
 
 .text-container {
@@ -305,26 +305,24 @@ p {
 .skill {
     width: auto;
     height: auto;
-    margin: 1vw 1vw;
     position: absolute;
     text-align: center;
-    font: 1vw "Fjalla One";
+    font: 1.2vmin "Fjalla One";
     transition: all 1s ease-in-out 800ms;
 }
 
 .skill img {
-    width: min(18rem, 30vh);
-    height: min(18rem, 30vh);
+    width: 30vmin;
+    height: 30vmin;
     object-fit: cover;
     display: block;
-    margin-bottom: 1vh;
     border-radius: 50%;
     box-sizing: border-box;
 }
 
 .skill:after {
-    width: min(18.4rem, 31vh);
-    height: min(18.4rem, 31vh);
+    width: 31vmin;
+    height: 31vmin;
     content: "";
     position: absolute;
     top: -0.2vw;
@@ -336,8 +334,8 @@ p {
 }
 
 .skill-overlay {
-    width: min(18rem, 30vh);
-    height: min(18rem, 30vh);
+    width: 30vmin;
+    height: 30vmin;
     display: flex;
     align-items: center;
     position: absolute;
@@ -363,8 +361,6 @@ p {
     width: 100%;
     height: 100%;
     padding: 1vw;
-    padding-left: 15%;
-    padding-right: 15%;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -374,6 +370,8 @@ p {
 .skill-overlay h3 {
     width: 100%;
     margin: 0;
+    margin-bottom: 3%;
+    font: 2.5vmin "Fjalla One";
 }
 
 .panel a {
@@ -392,6 +390,7 @@ p {
 .info {
     width: 100%;
     line-height: 1.5em;
+    font: 2vmin "Raleway";
     display: flex;
     align-items: center;
     position: relative;
