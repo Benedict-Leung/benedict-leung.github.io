@@ -158,12 +158,12 @@ $(document).ready(function() {
         activateHR();
     });
     
-    $(".container").on("mousewheel", function(e) {
+    $(".container").on("mousewheel DOMMouseScroll", function(e) {
         if (!e.ctrlKey) {
             e.preventDefault();
-            if (e.originalEvent.deltaY > 50) {
+            if (e.originalEvent.deltaY > 50 || e.originalEvent.detail > 0 ) {
                 slideDown();
-            } else if (e.originalEvent.deltaY < -50) {
+            } else if (e.originalEvent.deltaY < -50 || e.originalEvent.detail < 0) {
                 slideUp();
             }
         }
