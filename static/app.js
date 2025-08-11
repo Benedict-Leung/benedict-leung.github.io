@@ -139,14 +139,14 @@ function makeCanvasTexture(w, h, draw, colorSpace = THREE.SRGBColorSpace) {
     tex.colorSpace = colorSpace;
     return tex;
 }
-                    
+
 // Approximate a height (bump) map from a tangent-space normal map by integrating gradients.
 function normalToHeightTexture(normalTex, strength = 1.0) {
     try {
         const img = normalTex?.image;
         const W = img?.width || 0,
             H = img?.height || 0;
-    if (!W || !H) return null;
+        if (!W || !H) return null;
         const c = document.createElement("canvas");
         c.width = W;
         c.height = H;
@@ -838,17 +838,17 @@ function loadRealMarsTextures(planet) {
 
 function attachOverlayToSprite(sprite, label, description, links) {
     try {
-    // Determine desired overlay pixel size from sprite hint (matches moon target px)
-    const desiredPx = Math.max(BASE_OVERLAY_PX, Math.min(512, Math.round(sprite?.userData?.overlayPx || sprite?.userData?.basePx || BASE_OVERLAY_PX)));
+        // Determine desired overlay pixel size from sprite hint (matches moon target px)
+        const desiredPx = Math.max(BASE_OVERLAY_PX, Math.min(512, Math.round(sprite?.userData?.overlayPx || sprite?.userData?.basePx || BASE_OVERLAY_PX)));
         const size = desiredPx; // overlay canvas resolution in pixels
-    const c = document.createElement("canvas");
-    // Increase backing resolution for sharper text (HiDPI); cap at 2x for perf
-    const DPR = 3;
-    c.width = Math.round(size * DPR);
-    c.height = Math.round(size * DPR);
-    const ctx = c.getContext("2d");
-    // Draw in CSS pixel coordinates while the bitmap is HiDPI
-    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+        const c = document.createElement("canvas");
+        // Increase backing resolution for sharper text (HiDPI); cap at 2x for perf
+        const DPR = 3;
+        c.width = Math.round(size * DPR);
+        c.height = Math.round(size * DPR);
+        const ctx = c.getContext("2d");
+        // Draw in CSS pixel coordinates while the bitmap is HiDPI
+        ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
         // Ratio so circle scales with moon, but text/pills stay at 128px baseline
         const S = BASE_OVERLAY_PX; // baseline design space for typography/pills
         const ratio = size / S; // how much larger/smaller than 128px the moon/overlay is
@@ -876,7 +876,7 @@ function attachOverlayToSprite(sprite, label, description, links) {
             // Label: move slightly higher and auto-shrink font until it fits within 4 lines
             const maxWLabel = Math.round(S * ratio * 0.78);
             const maxLabelLines = 4;
-            const minFontPx = Math.round(S * 0.08);
+            const minFontPx = Math.round(S * 0.02);
             let fontPx = Math.round(S * 0.12);
             let labelLines = [];
             const wrapWithFont = (text, fontPxLocal) => {
@@ -908,11 +908,11 @@ function attachOverlayToSprite(sprite, label, description, links) {
             for (let i = 0; i < labelLines.length; i++) {
                 ctx.fillText(labelLines[i], size / 2, yLabel + i * labelLineH);
             }
-            const labelEndY = yLabel + (Math.max(1, labelLines.length)) * labelLineH;
+            const labelEndY = yLabel + Math.max(1, labelLines.length) * labelLineH;
 
             // Description: start below label block (or fallback to baseline position)
             if (description) {
-                ctx.font = `${Math.round(S * 0.08)}px sans-serif`;
+                ctx.font = `${Math.min(Math.round(fontPx - 2), Math.round(S * 0.07))}px sans-serif`;
                 const words = String(description).split(" ");
                 let line = "";
                 const maxW = Math.round(S * ratio * 0.78); // wrap width in baseline pixels
@@ -935,8 +935,8 @@ function attachOverlayToSprite(sprite, label, description, links) {
             if (Array.isArray(links) && links.length) {
                 const padX = Math.round(S * 0.034);
                 const gap = Math.round(S * 0.02);
-                const pillH = Math.round(S * 0.12);
-                ctx.font = `${Math.round(S * 0.09)}px sans-serif`;
+                const pillH = Math.round(labelLineH);
+                ctx.font = `${Math.min(Math.round(fontPx - 2), Math.round(S * 0.07))}px sans-serif`;
                 const metrics = links.map(l => {
                     const t = String(l?.text ?? "");
                     const w = Math.ceil(ctx.measureText(t).width) + padX * 2;
@@ -994,13 +994,13 @@ function attachOverlayToSprite(sprite, label, description, links) {
         };
         // Initial draw
         let linkHotspots = drawOverlay(-1) || null;
-    const overlayTex = new THREE.CanvasTexture(c);
-    overlayTex.colorSpace = THREE.SRGBColorSpace;
-    // Keep overlay light-weight: no mipmaps and minimal anisotropy
-    overlayTex.generateMipmaps = false;
-    overlayTex.minFilter = THREE.LinearFilter;
-    overlayTex.magFilter = THREE.LinearFilter;
-    overlayTex.anisotropy = 1;
+        const overlayTex = new THREE.CanvasTexture(c);
+        overlayTex.colorSpace = THREE.SRGBColorSpace;
+        // Keep overlay light-weight: no mipmaps and minimal anisotropy
+        overlayTex.generateMipmaps = false;
+        overlayTex.minFilter = THREE.LinearFilter;
+        overlayTex.magFilter = THREE.LinearFilter;
+        overlayTex.anisotropy = 1;
         const overlayMat = new THREE.SpriteMaterial({ map: overlayTex, transparent: true, opacity: 0, depthTest: true, depthWrite: false });
         overlayMat.toneMapped = false;
         const overlay = new THREE.Sprite(overlayMat);
@@ -1411,6 +1411,25 @@ function randomizeMoonsOffsets(arr, planetIndex, frontDir, thetaPhase = 0) {
     const upGuess = Math.abs(forward.y) < 0.99 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
     const right = new THREE.Vector3().crossVectors(upGuess, forward).normalize();
     const up = new THREE.Vector3().crossVectors(forward, right).normalize();
+
+    // Prepare a temporary camera posed at the predicted final follow-camera for this planet
+    // so we can ensure randomly placed moons will appear on-screen when focused.
+    const planetWorld = host.mesh.getWorldPosition(new THREE.Vector3());
+    const camFinalPos = computeFinalCameraPosForPlanet(planetIndex) || camera.position.clone();
+    __tmpCam.fov = camera.fov;
+    __tmpCam.aspect = camera.aspect;
+    __tmpCam.near = camera.near;
+    __tmpCam.far = camera.far;
+    __tmpCam.updateProjectionMatrix();
+    __tmpCam.position.copy(camFinalPos);
+    __tmpCam.lookAt(planetWorld);
+    // Prepare camera basis for projecting sprite-aligned quads
+    const camX = new THREE.Vector3();
+    const camY = new THREE.Vector3();
+    const camZ = new THREE.Vector3();
+    __tmpCam.matrixWorld.extractBasis(camX, camY, camZ);
+    const NDC_PAD = 0.98; // keep a small border so pills don’t clip
+
     const goldenAngle = Math.PI * (3 - Math.sqrt(5));
     const n = arr.length;
     for (let k = 0; k < n; k++) {
@@ -1423,8 +1442,50 @@ function randomizeMoonsOffsets(arr, planetIndex, frontDir, thetaPhase = 0) {
             .addScaledVector(up, r * Math.sin(theta))
             .addScaledVector(forward, y)
             .normalize();
-        const radius = Rmid * (0.9 + Math.random() * 0.2);
-        arr[k].userData.offset = dir.multiplyScalar(radius);
+        let radius = Rmid * (0.9 + Math.random() * 0.2);
+        let offset = dir.clone().multiplyScalar(radius);
+        // If the projected sprite quad would be off-screen, gently push it toward the planet
+        // by shrinking the radius until it fits, but never below a safe minimum.
+        const minRadius = host.spec.r * 1.7; // don’t let moons get too close to the surface
+        let attempts = 24;
+        while (attempts-- > 0) {
+            // Estimate the sprite’s world half-size at this camera distance using its target pixel size
+            const sprite = arr[k];
+            const pxTarget = Math.max(48, Math.min(512, (sprite?.userData?.overlayPx || sprite?.userData?.basePx || 128) * 1.15));
+            const centerWorld = planetWorld.clone().add(offset);
+            const dist = __tmpCam.position.distanceTo(centerWorld);
+            const viewH = Math.max(1, renderer?.domElement?.clientHeight || window.innerHeight || 1);
+            const worldPerPixel = (2 * dist * Math.tan((__tmpCam.fov * Math.PI) / 180 / 2)) / viewH;
+            const halfW = pxTarget * worldPerPixel * 0.6;
+            const halfH = halfW; // sprites are square
+            // Build four corners aligned to camera axes
+            const c = centerWorld;
+            const r = camX.clone().multiplyScalar(halfW);
+            const u = camY.clone().multiplyScalar(halfH);
+            const corners = [c.clone().add(r).add(u), c.clone().add(r).sub(u), c.clone().sub(r).add(u), c.clone().sub(r).sub(u)];
+            let minX = Infinity,
+                maxX = -Infinity,
+                minY = Infinity,
+                maxY = -Infinity;
+            let allDepthOk = true;
+            for (let ci = 0; ci < corners.length; ci++) {
+                const v = corners[ci].clone().project(__tmpCam);
+                if (v.z < -1 || v.z > 1) {
+                    allDepthOk = false;
+                    break;
+                }
+                if (v.x < minX) minX = v.x;
+                if (v.x > maxX) maxX = v.x;
+                if (v.y < minY) minY = v.y;
+                if (v.y > maxY) maxY = v.y;
+            }
+            const fits = allDepthOk && minX >= -NDC_PAD && maxX <= NDC_PAD && minY >= -NDC_PAD && maxY <= NDC_PAD;
+            if (fits) break;
+            const next = Math.max(minRadius, offset.length() * 0.92);
+            if (next >= offset.length() - 1e-6) break; // no further progress
+            offset.setLength(next);
+        }
+        arr[k].userData.offset = offset;
     }
 }
 // Back-compat convenience wrappers referenced in handlers
@@ -1596,12 +1657,7 @@ function ensureProjectMoons(frontDir, show = true) {
     const images = ["Instagram.png", "ongoingGame.PNG", "Slide2.png", "SpamDetection.png"];
     const labels = ["Instagram Mock", "Battleship", "Game Blog", "Spam Detection"];
     const descriptions = ["Mocks the basic features of Instagram.", "Made using JavaFX and Java Sockets.", "A tank-based shooter game made using Three.js.", "Simple spam detection using three simple heuristics."];
-    const hrefs = [
-        "https://github.com/Benedict-Leung/Instagram-Mock",
-        "https://github.com/Benedict-Leung/Battleship",
-        "https://github.com/Benedict-Leung/GameBlog",
-        "https://github.com/Benedict-Leung/Spam-Detection"
-    ];
+    const hrefs = ["https://github.com/Benedict-Leung/Instagram-Mock", "https://github.com/Benedict-Leung/Battleship", "https://github.com/Benedict-Leung/GameBlog", "https://github.com/Benedict-Leung/Spam-Detection"];
     ensureMoons(projectMoons, 1, images, labels, descriptions, hrefs, frontDir, show, /*thetaPhase*/ 0, /*linkGroups*/ null);
     projectMoonsInitialized = true;
 }
@@ -1621,9 +1677,7 @@ function ensurePublicationsMoons(frontDir, show = true) {
             { text: "PDF", href: "static/pdf/GazeQ.pdf" },
             { text: "Code", href: "https://github.com/vialab/gazeq-gpt" },
         ],
-        [
-            { text: "Published Soon", href: "" },
-        ],
+        [{ text: "Published Soon", href: "" }],
     ];
 
     ensureMoons(publicationsMoons, 3, images, labels, descriptions, [], frontDir, show, /*thetaPhase*/ 0, linkGroups);
@@ -1722,9 +1776,12 @@ navButtons.about?.addEventListener("click", () => {
     setActive("about");
     hideMoons(projectMoons);
     hideMoons(publicationsMoons);
-    setCenter("About Me", `<div style="text-align: justify;"> <div style="margin-bottom: 12px; text-align: center; width: 100%;"> <a href='static/pdf/Resume.pdf' target='_blank'>CV</a> </div> Hi! My name is Benedict, but you can call me Ben for short. I am a Master computer science student at Ontario Tech University. My research area is human-computer interaction, focusing on novel interactions with hardware like pen-based devices, eye-tracking, and brain computer interfaces. Recently, my research has been creating interactions with Large Language Models.<br><br>
+    setCenter(
+        "About Me",
+        `<div style="text-align: justify;"> <div style="margin-bottom: 12px; text-align: center; width: 100%;"> <a href='static/pdf/Resume.pdf' target='_blank'>CV</a> </div> Hi! My name is Benedict, but you can call me Ben for short. I am a Master computer science student at Ontario Tech University. My research area is human-computer interaction, focusing on novel interactions with hardware like pen-based devices, eye-tracking, and brain computer interfaces. Recently, my research has been creating interactions with Large Language Models.<br><br>
     When I was young, around third grade, I was passionate about being an inventor, in the sense that I wanted to create something never made before and use it to help people who couldn't do a specific task. But that morphed when I was introduced to computer programming. I was amused by how you can put your “heart and soul” into a program and do exactly what you envisioned, meaning your legacy can be imprinted into your programs for generations. My desired legacy is to give to people worldwide, like aiding the blind or advancing neural interfaces. These “dreams” may seem distant, but someone must take the first step, even if no one is willing.
-    </div>`);
+    </div>`
+    );
     focusPlanet(0);
 });
 navButtons.projects?.addEventListener("click", () => {
@@ -1761,12 +1818,12 @@ navButtons.publications?.addEventListener("click", () => {
         if (publicationsMoonsInitialized) {
             randomizePublicationsMoonOffsets(frontDir);
             // Pre-size moons so they are ~96px at the camera's final position
-            setMoonsBaseSizeForFinalCamera(publicationsMoons, 3, 256);
+            setMoonsBaseSizeForFinalCamera(publicationsMoons, 3, Math.min(window.innerWidth / 4, 256));
             waitForSpritesReady(publicationsMoons).then(() => showMoons(publicationsMoons));
         } else {
             ensurePublicationsMoons(frontDir, false);
             // Pre-size moons so they are ~96px at the camera's final position
-            setMoonsBaseSizeForFinalCamera(publicationsMoons, 3, 256);
+            setMoonsBaseSizeForFinalCamera(publicationsMoons, 3, Math.min(window.innerWidth / 4, 256));
             waitForSpritesReady(publicationsMoons).then(() => showMoons(publicationsMoons));
         }
     }
@@ -1818,10 +1875,7 @@ renderer.domElement.addEventListener("click", ev => {
     const rect = renderer.domElement.getBoundingClientRect();
     const mx = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
     const my = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
-    const candidates = [
-        ...projectMoons.filter(m => m?.material?.opacity > 0),
-        ...publicationsMoons.filter(m => m?.material?.opacity > 0),
-    ];
+    const candidates = [...projectMoons.filter(m => m?.material?.opacity > 0), ...publicationsMoons.filter(m => m?.material?.opacity > 0)];
     if (!candidates.length) return;
     raycaster.setFromCamera({ x: mx, y: my }, camera);
     const hits = raycaster.intersectObjects(candidates, false);
@@ -2091,8 +2145,8 @@ function render(now) {
                         const canvasSize = obj?.userData?.overlayCanvasSize;
                         if (Array.isArray(hotspots) && hotspots.length && typeof canvasSize === "number") {
                             const rect = renderer.domElement.getBoundingClientRect();
-                            const clientX = ((pointer.x + 1) * 0.5) * rect.width + rect.left;
-                            const clientY = ((-pointer.y + 1) * 0.5) * rect.height + rect.top;
+                            const clientX = (pointer.x + 1) * 0.5 * rect.width + rect.left;
+                            const clientY = (-pointer.y + 1) * 0.5 * rect.height + rect.top;
                             const toScreen = v3 => {
                                 const v = v3.clone().project(camera);
                                 return { x: (v.x * 0.5 + 0.5) * rect.width, y: (-v.y * 0.5 + 0.5) * rect.height };
@@ -2158,7 +2212,7 @@ function render(now) {
                     // Update cursor: pointer on pills; pointer on moon without pills; default otherwise
                     try {
                         const hasPills = Array.isArray(obj?.userData?.linkHotspots) && obj.userData.linkHotspots.length;
-                        const desired = hasPills ? (pillHoverIndex >= 0 ? "pointer" : "default") : (obj ? "pointer" : "default");
+                        const desired = hasPills ? (pillHoverIndex >= 0 ? "pointer" : "default") : obj ? "pointer" : "default";
                         if (desired !== __lastCursor) {
                             renderer.domElement.style.cursor = desired;
                             __lastCursor = desired;
