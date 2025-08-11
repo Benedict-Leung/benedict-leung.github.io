@@ -1,292 +1,75 @@
 <!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta content="text/html;charset=utf-8" http-equiv="Content-Type">
-        <meta content="utf-8" http-equiv="encoding">    
-        <meta content='width=device-width, initial-scale=1.0'>
-        <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-        <title>Portfolio</title>
-        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/1.19.1/TweenMax.min.js"></script>
-        <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/emailjs-com@2/dist/email.min.js"></script>
-        <script type="text/javascript">
-            (function() {
-                emailjs.init("user_MSUyTPvHZPGetGPOHxZWz");
-            })();
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Benedict Leung</title>
+    <link rel="stylesheet" href="static/app.css" />
+
+    <!-- import map resolves bare "three" specifiers used by examples/jsm modules -->
+    <script type="importmap">
+            {
+                "imports": {
+                    "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+                    "three/": "https://cdn.jsdelivr.net/npm/three@0.158.0/"
+                }
+            }
         </script>
-        <link rel = "stylesheet" href = "static/index.css">
-        <script src = "static/index.js"></script>
-    </head>
-  <body>
-    <div class = "header" id = "header">
-        <a class = "welcomeButton">HOME</a>
-        <a class = "aboutButton">ABOUT</a>
-        <a class = "skillsButton">SKILLS</a>
-        <a class = "projectsButton">PROJECTS</a>
-        <a class = "contactButton">CONTACT</a>
-    </div>
+</head>
 
-    <svg preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" id="loader">
-        <defs>
-            <filter id="goo">
-                <feGaussianBlur in="SourceGraphic" result="blur" stdDeviation="10" />
-                <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" result="goo" />
-                <feBlend in2="goo" in="SourceGraphic" result="mix" />
-            </filter>
-            <linearGradient id="MyGradient">
-                <stop offset="5%"  stop-color="#6F2232"/>
-                <stop offset="40%" stop-color="#a3225c"/>
-                <stop offset="100%" stop-color="#e24926"/>
-            </linearGradient>
-        </defs>
-        <mask id="maska">
-            <g class="blobs">
-                <circle class="blob" fill="white" cx="300" cy="50" r="70" transform="rotate(0) translate(0, 0) rotate(0)"/>
-                <circle class="blob" fill="white" cx="230" cy="300" r="150" transform="rotate(0) translate(0, 0) rotate(0)"/>
-                <circle class="blob" fill="white" cx="50" cy="300" r="60" transform="rotate(0) translate(0, 0) rotate(0)"/>
-                <circle class="blob" fill="white" cx="400" cy="170" r="100" transform="rotate(0) translate(0, 0) rotate(0)"/>
-                <circle class="blob" fill="white" cx="200" cy="480" r="60" transform="rotate(0) translate(0, 0) rotate(0)"/>
+<body class="is-loading">
+    <div id="preloader" aria-live="polite" aria-busy="true">
+        <!-- Keep id preloader-ring-fg for JS hook; now the SVG root hosts the CSS var --p -->
+        <svg id="preloader-ring-fg" class="preloader-moon" viewBox="0 0 120 120" role="progressbar" aria-label="Loading"
+            aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <defs>
+                <!-- slight blur to soften the terminator edge -->
+                <filter id="moon-soften" x="-20%" y="-20%" width="140%" height="140%">
+                    <feGaussianBlur in="SourceGraphic" stdDeviation="0.8" />
+                </filter>
+                <mask id="moonMask">
+                    <!-- Black = hidden, White = visible -->
+                    <rect width="120" height="120" fill="black" />
+                    <circle cx="60" cy="60" r="54" fill="white" />
+                    <circle class="shadow" cx="60" cy="60" r="54" fill="black" filter="url(#moon-soften)" />
+                </mask>
+            </defs>
+            <!-- illuminated disc clipped by moving shadow to simulate phases -->
+            <g mask="url(#moonMask)">
+                <circle class="lit" cx="60" cy="60" r="54" />
+                <!-- simple cartoon craters (spread out) -->
+                <circle class="crater" cx="42" cy="38" r="10" />
+                <circle class="crater" cx="73" cy="64" r="6.2" />
+                <circle class="crater" cx="50" cy="95" r="8" />
+                <circle class="crater" cx="86" cy="82" r="5.5" />
+                <circle class="crater" cx="102" cy="43" r="5.8" />
+                <circle class="crater" cx="34" cy="78" r="5.2" />
+                <circle class="crater" cx="78" cy="28" r="12.4" />
             </g>
-        </mask>
-        <rect mask="url(#maska)" fill="url(#MyGradient)" width="100%" height="100%">
-    </svg>
+            <circle class="rim" cx="60" cy="60" r="54" />
+        </svg>
+        <div id="preloader-text">0%</div>
+    </div>
+    <nav>
+        <button id="nav-planets">Home</button>
+        <button id="nav-about">About Me</button>
+        <button id="nav-projects">Projects</button>
+        <button id="nav-publications">Publications</button>
+        <button id="nav-contact">Contact</button>
+    </nav>
 
-    <div class = "navigation">
-        <hr style = "width: 50%" class = "welcomeButton">
-        <hr class = "aboutButton">
-        <hr class = "skillsButton">
-        <hr class = "projectsButton">
-        <hr class = "contactButton">
+    <div class="intro">
+        <h1 id="centerTitle">Benedict Leung's Galaxy</h1>
+        <p id="centerText">Computer Science, MSc</p>
     </div>
 
-    <div class = "container">
-        <div class = "welcome panel">
-            <div class = "welcome-text">
-                <span class = "line1">BENEDICT LEUNG</span>
-                <span class = "line2">Third Year Computer Science Student</span>
-            </div>
-            <a id = "learn">Learn more about me</a>
-        </div>
+    <canvas id="bg"></canvas>
 
-        <div class = "about panel">
-            <div class = "panel-title">ABOUT ME</div>
-            <div class = "text-container">
-                <p>Hi! My name is Benedict, but you can call me Ben for short. I am a computer science student at Ontario Tech University.</p>
-                <p>When I was young, around third grade, I was passionate about being an inventor in the sense that you could make something that has never been made before and use that to help people who aren't capable or able to do a specific task. But that morphed into something different when I was exposed to computer programming. I was amused by how you could put your heart and soul into a program and would do exactly what you envisioned. What I mean about "heart and soul" is your legacy can be imprinted into your programs for generations to come. My desired legacy is to help people around the world specifically for people who need it, for example, curing the blind, helping second-language speakers and etc. Now I know these examples seem far ways, but someone needs to take the first step closer to these so-called "dreams" even if no one is willing to do it.  </p>
-            </div>
-        </div>
+    <!-- GSAP (UMD global) loaded before module so module can use global `gsap` if needed -->
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.2/dist/gsap.min.js"></script>
+    <!-- Module entry: imports resolved via importmap above -->
+    <script type="module" src="static/app.js"></script>
+</body>
 
-        <div class = "skills panel">
-            <div class = "content-container">
-                <div class = "center-title">SKILLS</div>
-                <div class = "skill">
-                    <img src = "static/img/java.jpg">
-                    <div class = "skill-overlay">
-                        <div>
-                            <span class = "info">
-                                <h3>Java</h3>
-                            </span>
-                            <span class = "info">
-                                <img src = "static/img/javaswing.jpg">Java Swing
-                            </span>
-                            <span class = "info">
-                                <img src = "static/img/javafx.png">JavaFX
-                            </span>
-                            <span class = "info">
-                                <img src = "static/img/javasocket.png">Sockets
-                            </span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class = "skill">
-                    <img src = "static/img/python.png">
-                    <div class = "skill-overlay">
-                        <div>
-                            <span class = "info">
-                                <h3>Python</h3>
-                            </span>
-                            <span class = "info">
-                                <img src = "static/img/numpy.png">NumPy, Matlab
-                            </span>
-                            <span class = "info">
-                                <img src = "static/img/flask.png">Flask, SQLAlchemy
-                            </span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class = "skill">
-                    <img src = "static/img/web.jpg">
-                    <div class = "skill-overlay">
-                        <div>
-                            <span class = "info">
-                                <h3>Web Application</h3>
-                            </span>
-                            <span class = "info">
-                                <img src = "static/img/web.jpg">HTML, CSS, Javascript, jQuery
-                            </span>
-                            <span class = "info">
-                                <img src = "static/img/nodejs.jpg">Node.js, Three.js
-                            </span>
-                            <span class = "info">
-                                <img src = "static/img/flask.png">Flask
-                            </span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class = "skill">
-                    <img src = "static/img/c.png">
-                    <div class = "skill-overlay">
-                        <div>
-                            <span class = "info">
-                                <h3>C programming language</h3>
-                            </span>
-                            <span class = "info">
-                                <img src = "static/img/c.png">C
-                            </span>
-                            <span class = "info">
-                                <img src = "static/img/c++.jpg">C++
-                            </span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class = "skill">
-                    <img src = "static/img/lisp.png">
-                    <div class = "skill-overlay">
-                        <div>
-                            <span class = "info">
-                                <h3>Functional programming language</h3>
-                            </span>
-                            <span class = "info">
-                                <img src = "static/img/clojure.png">Clojure
-                            </span>
-                            <span class = "info">
-                                <img src = "static/img/scala.png">Scala
-                            </span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class = "projects panel">
-            <div class = "content-container">
-                <div class = "center-title">PROJECTS <p>More repos <a href = "https://github.com/Benedict-Leung?tab=repositories" target = "_blank">here</a></p></div>
-
-                <div class = "skill">
-                    <img src = "https://github.com/Benedict-Leung/Megaman-animation/blob/main/Megaman.png?raw=true">
-                    <div class = "skill-overlay">
-                        <div>
-                            <span class = "info">
-                                <h3><a href = "https://github.com/Benedict-Leung/Megaman-animation" target = "_blank">Megaman Animation</a></h3>
-                            </span>
-                            <span class = "info">
-                                <p>
-                                    A simple animation using Java Swing. The animation consists of sprites that can be controlled by the keyboard.
-                                </p>
-                            </span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class = "skill">
-                    <img src = "https://github.com/Benedict-Leung/Java-Photoshop/blob/main/Photoshop.png?raw=true">
-                    <div class = "skill-overlay">
-                        <div>
-                            <span class = "info">
-                                <h3><a href = "https://github.com/Benedict-Leung/Java-Photoshop" target = "_blank">Photoshop</a></h3>
-                            </span>
-                            <span class = "info">
-                                <p>Mocks the basic features of Photoshop using Java Swing. You can apply filters and paint/draw on the image.</p>
-                            </span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class = "skill">
-                    <img src = "https://github.com/Benedict-Leung/Javmos/blob/main/Javmos.png?raw=true">
-                    <div class = "skill-overlay">
-                        <div>
-                            <span class = "info">
-                                <h3><a href = "https://github.com/Benedict-Leung/Javmos" target = "_blank">Javmos</a></h3>
-                            </span>
-                            <span class = "info">
-                                <p>Mocks the basic features of Desmos using Java Swing. You can plot simple functions (trignometric, logarithmic and polynomials) and shows roots, critical points and inflection points.</p>
-                            </span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class = "skill">
-                    <img src = "https://github.com/Benedict-Leung/Instagram-Mock/blob/master/Instagram.png?raw=true">
-                    <div class = "skill-overlay">
-                        <div>
-                            <span class = "info">
-                                <h3><a href = "https://github.com/Benedict-Leung/Instagram-Mock" target = "_blank">Instagram Mock</a></h3>
-                            </span>
-                            <span class = "info">
-                                <p>Mocks the basic features of Instagram using Flask and SQLAlchemy. Able to create accounts and post pictures via upload or camera. Afterwards, you can comment and like posts. You can also follow accounts to view other posts on your feed.</p>
-                            </span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class = "skill">
-                    <img src = "https://github.com/Benedict-Leung/GameBlog/blob/main/public/images/Slide2.png?raw=true">
-                    <div class = "skill-overlay">
-                        <div>
-                            <span class = "info">
-                                <h3><a href = "https://github.com/Benedict-Leung/GameBlog" target = "_blank">Game Blog</a></h3>
-                            </span>
-                            <span class = "info">
-                                <p>
-                                    A blog where you can talk about the game using Node.js. The game is a free-for-all game where you shoot other players for points which is made with Three.js.
-                                </p>
-                            </span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class = "skill">
-                    <img src = "https://github.com/Benedict-Leung/Battleship/blob/main/ImageResources/ongoingGame.PNG?raw=true">
-                    <div class = "skill-overlay">
-                        <div>
-                            <span class = "info">
-                                <h3><a href = "https://github.com/Benedict-Leung/Battleship" target = "_blank">Battleship</a></h3>
-                            </span>
-                            <span class = "info">
-                                <p>
-                                    This game is made by using JavaFX. It is a two player game where it is connected to a server via Java Sockets.
-                                </p>
-                            </span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class = "contact panel">
-            <div class = "panel-title">CONTACT ME<p>Thanks for visiting!</p></div>
-            <div class = "text-container">
-                <form class="form" id="contact-form">
-                    <div class="form-info">
-                        <input id="name" name="user_name" type="text" placeholder=" " required="">
-                        <label for="name">Name</label>
-                    </div>
-                    <div class="form-info">
-                        <input id="email" name="user_email" type="email" placeholder=" " required="">
-                        <label for="email">Email</label>
-                    </div>
-                    <div class="form-info">
-                        <textarea id="message" name="message" rows="15" cols="50" required=""></textarea>
-                        <label for="message">Message</label>
-                    </div>
-                    <input type="submit" value="Send" class="button">
-                </form>
-            </div>
-        </div>
-    </body>
 </html>

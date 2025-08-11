@@ -1,0 +1,174 @@
+html,
+body {
+    height: 100%;
+    margin: 0;
+    background: #000;
+    color: #fff;
+    font-family: system-ui, Segoe UI, Roboto, Arial;
+}
+
+nav {
+    position: fixed;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    display: flex;
+    gap: 14px;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 8px 12px;
+    border-radius: 10px;
+}
+
+nav button {
+    background: transparent;
+    color: #fff;
+    border: none;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+
+    text-decoration: none;
+    position: relative;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+}
+
+
+nav button:before, nav button:after {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 90%;
+    height: 1.5vw;
+    background: transparent;
+    content: "";
+    opacity: 0;
+    transition: all 0.3s;
+    z-index: -1;
+}
+
+nav button:before {
+    border-top: 0.1vw solid white;
+    transform: translateX(-50%) translateY(-30%);
+}
+
+nav button:after {
+    border-bottom: 0.1vw solid white;
+    transform: translateX(-50%) translateY(-70%);
+}
+
+nav button:hover:before {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-50%);
+}
+
+nav button:hover:after {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-50%);
+}
+
+.intro {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    z-index: 10;
+    pointer-events: none;
+    background-color:rgba(0, 0, 0, 0.1);
+    padding: 10px;
+    border-radius: 10px;
+}
+
+.intro h1 {
+    margin: 0;
+    font-size: 3rem;
+    text-shadow: 0 6px 28px rgba(0, 0, 0, 0.6);
+    text-align: center;
+}
+
+.intro p {
+    margin-top: 12px;
+    max-width: 650px;
+    opacity: 0.95;
+}
+
+.intro a {
+    color: #ffd34d;
+    text-decoration: none;
+    pointer-events: all;
+}
+
+canvas#bg {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+}
+
+/* Lightweight preloader that shows until JS hides it */
+#preloader {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    z-index: 9999;
+    transition: opacity .3s ease, visibility .3s ease;
+}
+
+#preloader.hide {
+    opacity: 0;
+    visibility: hidden;
+}
+
+/* Moon-phase preloader */
+.preloader-moon {
+    width: 96px;
+    height: 96px;
+    display: block;
+    /* customizable color */
+    --moon-color: #ffd34d;
+    /* warm yellow */
+    --moon-rim: rgba(255, 211, 77, 0.35);
+    --crater-fill: #e0b63c;
+    --crater-stroke: #c79e2f;
+}
+
+/* The moving shadow circle inside the mask; --p in [0,1] */
+.preloader-moon .shadow {
+    transform: translateX(calc(var(--p, 0) * 120px));
+    transform-box: fill-box;
+    transform-origin: 60px 60px;
+    transition: transform 1s cubic-bezier(.22, .61, .36, 1);
+    will-change: transform;
+}
+
+/* subtle rim */
+.preloader-moon .rim {
+    fill: none;
+    stroke: var(--moon-rim);
+    stroke-width: 2;
+}
+
+.preloader-moon .lit {
+    fill: var(--moon-color);
+}
+
+.preloader-moon .crater {
+    fill: var(--crater-fill);
+    stroke: var(--crater-stroke);
+    stroke-width: 1;
+    opacity: 0.9;
+}
+
+#preloader-text {
+    font-size: 14px;
+    opacity: 0.85;
+    letter-spacing: .3px;
+}
