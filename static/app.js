@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 let introSprite = null;
+const allPillSprites = [];
 
 // =============================
 // Utilities (helpers first)
@@ -1096,46 +1097,68 @@ function loadRealMarsTextures(planet) {
 
 function attachOverlayToSprite(sprite, label, description, links) {
     try {
+        // Cleanup existing overlay/pills to prevent duplicates/ghosts
+        if (sprite.userData?.overlay) {
+            sprite.remove(sprite.userData.overlay);
+            if (sprite.userData.overlay.geometry) sprite.userData.overlay.geometry.dispose();
+            if (sprite.userData.overlay.material) {
+                if (sprite.userData.overlay.material.map) sprite.userData.overlay.material.map.dispose();
+                sprite.userData.overlay.material.dispose();
+            }
+            sprite.userData.overlay = null;
+        }
+        if (Array.isArray(sprite.userData?.pillSprites)) {
+            sprite.userData.pillSprites.forEach(p => {
+                // Remove from scene if it was added there
+                if (p.parent) p.parent.remove(p);
+                // Remove from global list
+                const idx = allPillSprites.indexOf(p);
+                if (idx !== -1) allPillSprites.splice(idx, 1);
+
+                if (p.geometry) p.geometry.dispose();
+                if (p.material) {
+                    if (p.material.map) p.material.map.dispose();
+                    if (p.userData.texNormal) p.userData.texNormal.dispose();
+                    if (p.userData.texHover) p.userData.texHover.dispose();
+                    p.material.dispose();
+                }
+            });
+            sprite.userData.pillSprites = null;
+        }
+
         // Determine desired overlay pixel size from sprite hint (matches moon target px)
         const desiredPx = Math.max(BASE_OVERLAY_PX, Math.min(512, Math.round(sprite?.userData?.overlayPx || sprite?.userData?.basePx || BASE_OVERLAY_PX)));
         const size = desiredPx; // overlay canvas resolution in pixels
         const c = document.createElement("canvas");
         // Increase backing resolution for sharper text (HiDPI); cap at 2x for perf
-        const DPR = 3;
+        const DPR = 2.5;
         c.width = Math.round(size * DPR);
         c.height = Math.round(size * DPR);
         const ctx = c.getContext("2d");
         // Draw in CSS pixel coordinates while the bitmap is HiDPI
         ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
 
-        // --- Static Content Optimization ---
-        const staticCanvas = document.createElement("canvas");
-        staticCanvas.width = c.width;
-        staticCanvas.height = c.height;
-        const staticCtx = staticCanvas.getContext("2d");
-        staticCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
-
         // Ratio so circle scales with moon, but text/pills stay at 128px baseline
         const S = BASE_OVERLAY_PX; // baseline design space for typography/pills
         const ratio = size / S; // how much larger/smaller than 128px the moon/overlay is
 
         // 1) Background circle: scale with moon using ratio
-        staticCtx.save();
-        staticCtx.scale(ratio, ratio);
-        staticCtx.fillStyle = "rgba(14, 15, 17, 0.62)";
-        staticCtx.beginPath();
-        staticCtx.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2);
-        staticCtx.fill();
-        staticCtx.restore();
+        ctx.save();
+        ctx.scale(ratio, ratio);
+        ctx.fillStyle = "rgba(14, 15, 17, 0.62)";
+        ctx.beginPath();
+        ctx.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
 
-        // 2) Typography and pills: lock to baseline 128px regardless of overlay size
-        staticCtx.fillStyle = "#fff";
-        staticCtx.textAlign = "center";
-        staticCtx.textBaseline = "alphabetic";
+        // 2) Typography: lock to baseline 128px regardless of overlay size
+        ctx.fillStyle = "#fff";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "alphabetic";
         // keep light shadow for main title/desc only (reduce cost)
-        staticCtx.shadowColor = "rgba(0,0,0,0.55)";
-        staticCtx.shadowBlur = Math.max(1, Math.round(S * 0.01));
-        staticCtx.shadowOffsetY = Math.round(S * 0.01);
+        ctx.shadowColor = "rgba(0,0,0,0.55)";
+        ctx.shadowBlur = Math.max(1, Math.round(S * 0.01));
+        ctx.shadowOffsetY = Math.round(S * 0.01);
 
         // Label: move slightly higher and auto-shrink font until it fits within 4 lines
         const maxWLabel = Math.round(S * ratio * 0.78);
@@ -1144,13 +1167,13 @@ function attachOverlayToSprite(sprite, label, description, links) {
         let fontPx = Math.round(S * 0.12);
         let labelLines = [];
         const wrapWithFont = (text, fontPxLocal) => {
-            staticCtx.font = `${fontPxLocal}px sans-serif`;
+            ctx.font = `${fontPxLocal}px sans-serif`;
             const words = String(text || "").split(/\s+/);
             const lines = [];
             let cur = "";
             for (let i = 0; i < words.length; i++) {
                 const test = cur ? cur + " " + words[i] : words[i];
-                if (staticCtx.measureText(test).width > maxWLabel && cur) {
+                if (ctx.measureText(test).width > maxWLabel && cur) {
                     lines.push(cur);
                     cur = words[i];
                 } else {
@@ -1170,13 +1193,13 @@ function attachOverlayToSprite(sprite, label, description, links) {
         const labelLineH = Math.round(fontPx * 1.15);
         let yLabel = Math.round(size * 0.26); // moved higher vs 0.48
         for (let i = 0; i < labelLines.length; i++) {
-            staticCtx.fillText(labelLines[i], size / 2, yLabel + i * labelLineH);
+            ctx.fillText(labelLines[i], size / 2, yLabel + i * labelLineH);
         }
         const labelEndY = yLabel + Math.max(1, labelLines.length) * labelLineH;
 
         // Description: start below label block (or fallback to baseline position)
         if (description) {
-            staticCtx.font = `${Math.min(Math.round(fontPx - 2), Math.round(S * 0.07))}px sans-serif`;
+            ctx.font = `${Math.min(Math.round(fontPx - 2), Math.round(S * 0.07))}px sans-serif`;
             const words = String(description).split(" ");
             let line = "";
             const maxW = Math.round(S * ratio * 0.78); // wrap width in baseline pixels
@@ -1184,111 +1207,20 @@ function attachOverlayToSprite(sprite, label, description, links) {
             let y = Math.max(Math.round(size * 0.62), labelEndY + Math.round(S * 0.08));
             for (let i = 0; i < words.length; i++) {
                 const test = line ? line + " " + words[i] : words[i];
-                if (staticCtx.measureText(test).width > maxW) {
-                    staticCtx.fillText(line, size / 2, y);
+                if (ctx.measureText(test).width > maxW) {
+                    ctx.fillText(line, size / 2, y);
                     line = words[i];
                     y += descLineH;
                 } else {
                     line = test;
                 }
             }
-            if (line) staticCtx.fillText(line, size / 2, y);
+            if (line) ctx.fillText(line, size / 2, y);
         }
 
-        // Pre-calculate link metrics
-        let pillData = [];
-        let linkHotspotsStatic = null;
-        
-        if (Array.isArray(links) && links.length) {
-            const padX = Math.round(S * 0.034);
-            const gap = Math.round(S * 0.02);
-            const pillH = Math.round(labelLineH);
-            // Use staticCtx for measurement
-            staticCtx.font = `${Math.min(Math.round(fontPx - 2), Math.round(S * 0.07))}px sans-serif`;
-            
-            const metrics = links.map(l => {
-                const t = String(l?.text ?? "");
-                const w = Math.ceil(staticCtx.measureText(t).width) + padX * 2;
-                return { text: t, href: l?.href, w };
-            });
-            const totalW = metrics.reduce((a, m) => a + m.w, 0) + gap * Math.max(0, metrics.length - 1);
-            let x = Math.round((size - totalW) / 2);
-            const yTop = Math.round(size * 0.82);
-            
-            linkHotspotsStatic = [];
-            pillData = [];
-
-            metrics.forEach((m, i) => {
-                const r = Math.round(pillH / 2);
-                const w = m.w;
-                const h = pillH;
-                const y = yTop;
-                
-                pillData.push({
-                    x, y, w, h, r,
-                    text: m.text,
-                    font: staticCtx.font // Store font to use in drawOverlay
-                });
-                
-                linkHotspotsStatic.push({ x, y, w, h, href: m.href, text: m.text });
-                x += w + gap;
-            });
-        }
-
-        // Draw function so we can re-render on hover state
-        const drawOverlay = (hoverIndex = -1) => {
-            // Draw static content
-            ctx.save();
-            ctx.setTransform(1, 0, 0, 1, 0, 0);
-            ctx.clearRect(0, 0, c.width, c.height);
-            ctx.drawImage(staticCanvas, 0, 0);
-            ctx.restore();
-
-            // Draw pills
-            if (pillData.length) {
-                ctx.save();
-                // Pills: draw without shadows to keep hover cheap
-                ctx.shadowBlur = 0;
-                ctx.shadowColor = "transparent";
-                ctx.lineWidth = Math.max(1, Math.round(S * 0.006));
-                ctx.textAlign = "center";
-                ctx.textBaseline = "middle";
-                
-                pillData.forEach((p, i) => {
-                    ctx.font = p.font;
-                    const isHover = i === hoverIndex;
-                    ctx.fillStyle = isHover ? "rgba(255,255,255,0.30)" : "rgba(255,255,255,0.12)";
-                    ctx.strokeStyle = isHover ? "#ffffff" : "rgba(255,255,255,0.28)";
-                    
-                    // rounded rect
-                    ctx.beginPath();
-                    ctx.moveTo(p.x + p.r, p.y);
-                    ctx.lineTo(p.x + p.w - p.r, p.y);
-                    ctx.quadraticCurveTo(p.x + p.w, p.y, p.x + p.w, p.y + p.r);
-                    ctx.lineTo(p.x + p.w, p.y + p.h - p.r);
-                    ctx.quadraticCurveTo(p.x + p.w, p.y + p.h, p.x + p.w - p.r, p.y + p.h);
-                    ctx.lineTo(p.x + p.r, p.y + p.h);
-                    ctx.quadraticCurveTo(p.x, p.y + p.h, p.x, p.y + p.h - p.r);
-                    ctx.lineTo(p.x, p.y + p.r);
-                    ctx.quadraticCurveTo(p.x, p.y, p.x + p.r, p.y);
-                    ctx.closePath();
-                    ctx.fill();
-                    if (isHover) ctx.stroke();
-                    
-                    // text
-                    ctx.fillStyle = "#fff";
-                    ctx.fillText(p.text, p.x + p.w / 2, p.y + p.h / 2 + 1);
-                });
-                ctx.restore();
-            }
-            return linkHotspotsStatic;
-        };
-
-        // Initial draw
-        let linkHotspots = drawOverlay(-1) || null;
+        // Create main overlay sprite
         const overlayTex = new THREE.CanvasTexture(c);
         overlayTex.colorSpace = THREE.SRGBColorSpace;
-        // Keep overlay light-weight: no mipmaps and minimal anisotropy
         overlayTex.generateMipmaps = false;
         overlayTex.minFilter = THREE.LinearFilter;
         overlayTex.magFilter = THREE.LinearFilter;
@@ -1305,23 +1237,134 @@ function attachOverlayToSprite(sprite, label, description, links) {
         overlay.userData.label = label;
         overlay.userData.description = description;
         overlay.userData.links = Array.isArray(links) ? links : null;
-        overlay.userData.draw = hoverIndex => {
-            const hs = drawOverlay(hoverIndex);
-            overlay.userData.linkHotspots = hs;
-            overlay.material.map.needsUpdate = true;
-            // mirror to sprite
-            sprite.userData.linkHotspots = hs;
-        };
-        if (linkHotspots) {
-            overlay.userData.linkHotspots = linkHotspots;
-            sprite.userData = sprite.userData || {};
-            sprite.userData.linkHotspots = linkHotspots;
-            sprite.userData.overlayCanvasSize = size;
-            sprite.userData.links = links;
-        }
+        
         overlay.renderOrder = (sprite.renderOrder || 10) + 1;
         sprite.add(overlay);
         sprite.userData.overlay = overlay;
+
+        // --- Independent Pill Sprites ---
+        let linkHotspots = [];
+        let pillSprites = [];
+        
+        if (Array.isArray(links) && links.length) {
+            const padX = Math.round(S * 0.05); // Increased padding for better centering visual
+            const gap = Math.round(S * 0.02);
+            const pillH = Math.round(labelLineH);
+            
+            // Use a dedicated measurement context to ensure consistency with pill rendering
+            const mC = document.createElement("canvas");
+            const mCtx = mC.getContext("2d");
+            const pDPR = 2.0; 
+            mCtx.setTransform(pDPR, 0, 0, pDPR, 0, 0);
+            const pillFont = `${Math.min(Math.round(fontPx - 2), Math.round(S * 0.07))}px sans-serif`;
+            mCtx.font = pillFont;
+            
+            const metrics = links.map(l => {
+                const t = String(l?.text ?? "");
+                const w = Math.ceil(mCtx.measureText(t).width) + padX * 2;
+                return { text: t, href: l?.href, w };
+            });
+            const totalW = metrics.reduce((a, m) => a + m.w, 0) + gap * Math.max(0, metrics.length - 1);
+            let x = Math.round((size - totalW) / 2);
+            const yTop = Math.round(size * 0.82);
+            
+            metrics.forEach((m, i) => {
+                const w = m.w;
+                const h = pillH;
+                const r = Math.round(pillH / 2);
+                
+                // Create TWO textures for this pill: Normal and Hover
+                const createPillTexture = (isHover) => {
+                    const pC = document.createElement("canvas");
+                    pC.width = Math.round(w * pDPR);
+                    pC.height = Math.round(h * pDPR);
+                    const pCtx = pC.getContext("2d");
+                    pCtx.setTransform(pDPR, 0, 0, pDPR, 0, 0);
+                    
+                    pCtx.font = pillFont;
+                    pCtx.textAlign = "center";
+                    pCtx.textBaseline = "middle";
+                    
+                    pCtx.fillStyle = isHover ? "rgba(255,255,255,0.30)" : "rgba(255,255,255,0.12)";
+                    pCtx.strokeStyle = isHover ? "#ffffff" : "rgba(255,255,255,0.28)";
+                    pCtx.lineWidth = Math.max(1, Math.round(S * 0.006));
+                    
+                    // rounded rect
+                    pCtx.beginPath();
+                    pCtx.moveTo(r, 0);
+                    pCtx.lineTo(w - r, 0);
+                    pCtx.quadraticCurveTo(w, 0, w, r);
+                    pCtx.lineTo(w, h - r);
+                    pCtx.quadraticCurveTo(w, h, w - r, h);
+                    pCtx.lineTo(r, h);
+                    pCtx.quadraticCurveTo(0, h, 0, h - r);
+                    pCtx.lineTo(0, r);
+                    pCtx.quadraticCurveTo(0, 0, r, 0);
+                    pCtx.closePath();
+                    pCtx.fill();
+                    if (isHover) pCtx.stroke();
+                    
+                    pCtx.fillStyle = "#fff";
+                    pCtx.fillText(m.text, w / 2, h / 2);
+                    
+                    const tex = new THREE.CanvasTexture(pC);
+                    tex.colorSpace = THREE.SRGBColorSpace;
+                    tex.minFilter = THREE.LinearFilter;
+                    tex.magFilter = THREE.LinearFilter;
+                    return tex;
+                };
+
+                const texNormal = createPillTexture(false);
+                const texHover = createPillTexture(true);
+                
+                const pMat = new THREE.SpriteMaterial({ map: texNormal, transparent: true, opacity: 0, depthTest: true, depthWrite: false });
+                pMat.toneMapped = false;
+                const pSprite = new THREE.Sprite(pMat);
+                
+                // Position relative to moon center (0,0) in range [-0.5, 0.5]
+                // Canvas coords: x, yTop. 
+                // Center of pill in canvas coords: x + w/2, yTop + h/2
+                const cx = x + w / 2;
+                const cy = yTop + h / 2;
+                
+                const sx = (cx / size) - 0.5;
+                const sy = 0.5 - (cy / size);
+                
+                // Store layout data for manual positioning in render loop
+                pSprite.userData = {
+                    isPill: true,
+                    texNormal: texNormal,
+                    texHover: texHover,
+                    setHover: (isHover) => {
+                        pSprite.material.map = isHover ? texHover : texNormal;
+                    },
+                    parentMoon: sprite,
+                    pillIndex: i,
+                    href: m.href,
+                    // Layout relative to parent moon
+                    sx: sx,
+                    sy: sy,
+                    wRatio: w / size,
+                    hRatio: h / size
+                };
+                
+                pSprite.renderOrder = (sprite.renderOrder || 10) + 2;
+                
+                // Add to SCENE (or global group) instead of sprite to avoid billboarding issues
+                scene.add(pSprite);
+                pillSprites.push(pSprite);
+                allPillSprites.push(pSprite);
+                
+                linkHotspots.push({ x, y: yTop, w, h, href: m.href, text: m.text });
+                x += w + gap;
+            });
+        }
+        
+        sprite.userData.linkHotspots = linkHotspots;
+        sprite.userData.overlayCanvasSize = size;
+        sprite.userData.links = links;
+        sprite.userData.pillSprites = pillSprites;
+
     } catch (e) {}
 }
 
@@ -2415,6 +2458,143 @@ window.addEventListener("keydown", ev => {
         }
     }
 });
+
+// =============================
+// Render Loop Optimizations
+// =============================
+const _render_hoverCandidates = [];
+const _render_camRight = new THREE.Vector3();
+const _render_camUp = new THREE.Vector3();
+const _render_camBack = new THREE.Vector3();
+
+function updateMoonPositions(arr, now) {
+    arr.forEach(m => {
+        if (!m) return;
+        // If frozen (e.g., during fade-out), keep current position unchanged
+        if (m.userData?.freezePos) return;
+        const anim = m.userData?.anim;
+        if (anim) {
+            const tNow = now - anim.startTime;
+            // Start fade-in exactly when the animation begins
+            if (tNow > 0 && m.material && !m.userData?.fadeStarted) {
+                if (!m.userData) m.userData = {};
+                m.userData.fadeStarted = true;
+                m.material.transparent = true;
+                gsap.to(m.material, { opacity: 1, duration: 0.3, overwrite: true });
+            }
+            if (tNow <= 0) {
+                // Not started yet
+                m.position.copy(anim.startDir).multiplyScalar(anim.startR);
+            } else if (anim.phase === "entryOrbit") {
+                const t = Math.min(1, tNow / anim.entryDur);
+                // Keep angular velocity constant during the orbit for smoothness; spacing comes from staggered start times
+                const angle = lerp(anim.orbitStartAngle, anim.orbitEndAngle, t);
+                const dir = dirFromAngle(angle, anim.right, anim.up);
+                // Keep a fixed safe radius during the orbit to avoid intersecting the planet
+                const rad = anim.startR;
+                m.position.copy(dir.multiplyScalar(rad));
+                if (t >= 1) {
+                    // Immediately start settling after completing exactly one orbit
+                    anim.phase = "settle";
+                    anim.settleStartTime = now;
+                    anim.settleStartAngle = angle;
+                    // Start settling from the orbit radius toward the target plane radius
+                    anim.settleStartPlaneR = anim.startR;
+                    anim.settleStartY = 0;
+                }
+            } else if (anim.phase === "orbit") {
+                // Legacy path no longer used when settling immediately after one orbit; keep as fallback
+                const omega = (anim.orbitEndAngle - anim.orbitStartAngle) / Math.max(1, anim.entryDur);
+                const angle = (anim.orbitLoopStartAngle ?? anim.orbitEndAngle) + omega * (now - (anim.orbitLoopStartTime || now));
+                const dir = dirFromAngle(angle, anim.right, anim.up);
+                m.position.copy(dir.multiplyScalar(anim.targetPlaneR));
+            } else if (anim.phase === "settle") {
+                const t = Math.min(1, (now - anim.settleStartTime) / anim.settleDur);
+                // Smooth angular deceleration using cubic Hermite with initial slope matched to orbit
+                const startAng = anim.settleStartAngle ?? anim.orbitEndAngle;
+                const delta = angleDiffShortest(startAng, anim.targetAngle);
+                const omegaEntry = (anim.orbitEndAngle - anim.orbitStartAngle) / Math.max(1, anim.entryDur); // rad/ms
+                // Normalize initial slope to the segment length
+                const vNormRaw = (omegaEntry * (anim.settleDur || 1)) / Math.max(1e-3, Math.abs(delta));
+                const vNorm = Math.sign(delta) * Math.min(1.0, Math.abs(vNormRaw)); // clamp to avoid overshoot
+                const s = hermite01(t, vNorm, 0);
+                const angle = startAng + delta * s;
+                // Ease planar radius and vertical height for a soft transition
+                const kPos = easeOutCubic(t);
+                const rPlane = lerp(anim.settleStartPlaneR ?? anim.targetPlaneR, anim.targetPlaneR ?? anim.targetPlaneR, kPos);
+                const y = lerp(anim.settleStartY ?? 0, anim.targetY ?? 0, kPos);
+                const dirXZ = dirFromAngle(angle, anim.right, anim.up);
+                m.position.set(dirXZ.x * rPlane, y, dirXZ.z * rPlane);
+                if (t >= 1) {
+                    // Done: snap to final offset and clear anim
+                    if (m.userData?.offset) m.position.copy(m.userData.offset);
+                    m.userData.anim = null;
+                    // Release sequencer to allow next moon to settle
+                    if (arr && typeof arr.__settleCursor === "number") {
+                        arr.__settleActive = false;
+                        const total = Array.isArray(arr.__settleOrder) ? arr.__settleOrder.length : arr.length;
+                        arr.__settleCursor = Math.min((arr.__settleCursor || 0) + 1, total);
+                    }
+                }
+            }
+        } else if (m.userData?.offset && !m.userData?.freezePos) {
+            m.position.copy(m.userData.offset);
+        }
+    });
+}
+
+function runSettleSequencer(list, nowMs) {
+    if (!list || !list.length) return;
+    if (list.__settleActive) return;
+    const cursor = list.__settleCursor || 0;
+    if (cursor >= list.length) return;
+    const idx = Array.isArray(list.__settleOrder) ? list.__settleOrder[cursor] : cursor;
+    const m = list[idx];
+    const anim = m && m.userData && m.userData.anim;
+    if (anim && anim.phase === "orbit") {
+        // Capture current angle to ensure seamless transition
+        const omega = (anim.orbitEndAngle - anim.orbitStartAngle) / Math.max(1, anim.entryDur); // rad/ms
+        const currAngle = (anim.orbitLoopStartAngle ?? anim.orbitEndAngle) + omega * (nowMs - (anim.orbitLoopStartTime || nowMs));
+        anim.phase = "settle";
+        anim.settleStartTime = nowMs;
+        anim.settleStartAngle = currAngle;
+        anim.settleStartPlaneR = anim.targetR;
+        anim.settleStartY = 0;
+        list.__settleActive = true;
+    }
+}
+
+function pxToWorld(dist, clientHeight) {
+    // worldUnitsPerPixel = (2 * dist * tan(fov/2)) / viewportHeightPixels
+    const fovRad = (camera.fov * Math.PI) / 180;
+    const worldPerPixel = (2 * dist * Math.tan(fovRad / 2)) / clientHeight;
+    return worldPerPixel;
+}
+
+function applyScreenSpaceScale(arr, planetIndex, clientHeight) {
+    if (!arr.length) return;
+    const planet = planets[planetIndex];
+    if (!planet) return;
+    arr.forEach(m => {
+        const bs = m.userData?.baseScale;
+        if (!bs) return;
+        const hf = m.userData?.isHovered ? 1.35 : 1.0;
+        if (m.userData?.lockScale && typeof m.userData.baseWorldSize === "number") {
+            // Keep the world size fixed (computed for final camera position), only apply hover multiplier
+            const w = m.userData.baseWorldSize * hf;
+            m.scale.set(w, w, 1);
+        } else {
+            // Fallback: constant-pixel sizing if not locked
+            const basePx = m.userData?.basePx || 64;
+            const camToMoon = camera.position.distanceTo(m.getWorldPosition(__vTemp3.set(0, 0, 0)));
+            const wpp = pxToWorld(camToMoon, clientHeight);
+            const targetWorldSize = basePx * wpp;
+            const sx = targetWorldSize * hf;
+            const sy = targetWorldSize * hf;
+            m.scale.set(sx, sy, 1);
+        }
+    });
+}
 function render(now) {
     // Initialize time origin and avoid a large first-frame dt
     if (__t0 === null) {
@@ -2471,206 +2651,93 @@ function render(now) {
 
     // (Removed duplicate cloud rotation; handled in planet update above)
 
-    const updateMoonPositions = arr => {
-        arr.forEach(m => {
-            if (!m) return;
-            // If frozen (e.g., during fade-out), keep current position unchanged
-            if (m.userData?.freezePos) return;
-            const anim = m.userData?.anim;
-            if (anim) {
-                const tNow = now - anim.startTime;
-                // Start fade-in exactly when the animation begins
-                if (tNow > 0 && m.material && !m.userData?.fadeStarted) {
-                    if (!m.userData) m.userData = {};
-                    m.userData.fadeStarted = true;
-                    m.material.transparent = true;
-                    gsap.to(m.material, { opacity: 1, duration: 0.3, overwrite: true });
-                }
-                if (tNow <= 0) {
-                    // Not started yet
-                    m.position.copy(anim.startDir).multiplyScalar(anim.startR);
-                } else if (anim.phase === "entryOrbit") {
-                    const t = Math.min(1, tNow / anim.entryDur);
-                    const kRad = easeOutCubic(t);
-                    // Keep angular velocity constant during the orbit for smoothness; spacing comes from staggered start times
-                    const angle = lerp(anim.orbitStartAngle, anim.orbitEndAngle, t);
-                    const dir = dirFromAngle(angle, anim.right, anim.up);
-                    // Keep a fixed safe radius during the orbit to avoid intersecting the planet
-                    const rad = anim.startR;
-                    m.position.copy(dir.multiplyScalar(rad));
-                    if (t >= 1) {
-                        // Immediately start settling after completing exactly one orbit
-                        anim.phase = "settle";
-                        anim.settleStartTime = now;
-                        anim.settleStartAngle = angle;
-                        // Start settling from the orbit radius toward the target plane radius
-                        anim.settleStartPlaneR = anim.startR;
-                        anim.settleStartY = 0;
-                    }
-                } else if (anim.phase === "orbit") {
-                    // Legacy path no longer used when settling immediately after one orbit; keep as fallback
-                    const omega = (anim.orbitEndAngle - anim.orbitStartAngle) / Math.max(1, anim.entryDur);
-                    const angle = (anim.orbitLoopStartAngle ?? anim.orbitEndAngle) + omega * (now - (anim.orbitLoopStartTime || now));
-                    const dir = dirFromAngle(angle, anim.right, anim.up);
-                    m.position.copy(dir.multiplyScalar(anim.targetPlaneR));
-                } else if (anim.phase === "settle") {
-                    const t = Math.min(1, (now - anim.settleStartTime) / anim.settleDur);
-                    // Smooth angular deceleration using cubic Hermite with initial slope matched to orbit
-                    const startAng = anim.settleStartAngle ?? anim.orbitEndAngle;
-                    const delta = angleDiffShortest(startAng, anim.targetAngle);
-                    const omegaEntry = (anim.orbitEndAngle - anim.orbitStartAngle) / Math.max(1, anim.entryDur); // rad/ms
-                    // Normalize initial slope to the segment length
-                    const vNormRaw = (omegaEntry * (anim.settleDur || 1)) / Math.max(1e-3, Math.abs(delta));
-                    const vNorm = Math.sign(delta) * Math.min(1.0, Math.abs(vNormRaw)); // clamp to avoid overshoot
-                    const s = hermite01(t, vNorm, 0);
-                    const angle = startAng + delta * s;
-                    // Ease planar radius and vertical height for a soft transition
-                    const kPos = easeOutCubic(t);
-                    const rPlane = lerp(anim.settleStartPlaneR ?? anim.targetPlaneR, anim.targetPlaneR ?? anim.targetPlaneR, kPos);
-                    const y = lerp(anim.settleStartY ?? 0, anim.targetY ?? 0, kPos);
-                    const dirXZ = dirFromAngle(angle, anim.right, anim.up);
-                    m.position.set(dirXZ.x * rPlane, y, dirXZ.z * rPlane);
-                    if (t >= 1) {
-                        // Done: snap to final offset and clear anim
-                        if (m.userData?.offset) m.position.copy(m.userData.offset);
-                        m.userData.anim = null;
-                        // Release sequencer to allow next moon to settle
-                        if (arr && typeof arr.__settleCursor === "number") {
-                            arr.__settleActive = false;
-                            const total = Array.isArray(arr.__settleOrder) ? arr.__settleOrder.length : arr.length;
-                            arr.__settleCursor = Math.min((arr.__settleCursor || 0) + 1, total);
-                        }
-                    }
-                }
-            } else if (m.userData?.offset && !m.userData?.freezePos) {
-                m.position.copy(m.userData.offset);
-            }
-        });
-    };
-    const runSettleSequencer = (list, nowMs) => {
-        if (!list || !list.length) return;
-        if (list.__settleActive) return;
-        const cursor = list.__settleCursor || 0;
-        if (cursor >= list.length) return;
-        const idx = Array.isArray(list.__settleOrder) ? list.__settleOrder[cursor] : cursor;
-        const m = list[idx];
-        const anim = m && m.userData && m.userData.anim;
-        if (anim && anim.phase === "orbit") {
-            // Capture current angle to ensure seamless transition
-            const omega = (anim.orbitEndAngle - anim.orbitStartAngle) / Math.max(1, anim.entryDur); // rad/ms
-            const currAngle = (anim.orbitLoopStartAngle ?? anim.orbitEndAngle) + omega * (nowMs - (anim.orbitLoopStartTime || nowMs));
-            anim.phase = "settle";
-            anim.settleStartTime = nowMs;
-            anim.settleStartAngle = currAngle;
-            anim.settleStartPlaneR = anim.targetR;
-            anim.settleStartY = 0;
-            list.__settleActive = true;
-        }
-    };
     if (projectMoons.length && planets[1]) {
-        updateMoonPositions(projectMoons);
+        updateMoonPositions(projectMoons, now);
         runSettleSequencer(projectMoons, now);
     }
     if (publicationsMoons.length && planets[3]) {
-        updateMoonPositions(publicationsMoons);
+        updateMoonPositions(publicationsMoons, now);
         runSettleSequencer(publicationsMoons, now);
     }
 
-    if (projectMoons.length || publicationsMoons.length) {
+    if ((projectMoons.length || publicationsMoons.length) && !__isAnimatingCam) {
         const inside = pointer.x >= -1 && pointer.x <= 1 && pointer.y >= -1 && pointer.y <= 1;
         if (pointerDirty && inside && performance.now() > __raycastPauseUntil) {
             if (now - __lastRaycastAt >= 12) {
                 // ~30Hz
-                const hoverCandidates = [...projectMoons.filter(m => m.material.opacity > 0), ...publicationsMoons.filter(m => m.material.opacity > 0)];
-                if (introSprite) hoverCandidates.push(introSprite);
+                // Reuse global array to avoid allocation
+                _render_hoverCandidates.length = 0;
+                const addMoon = (m) => {
+                    if (m.material.opacity > 0) {
+                        _render_hoverCandidates.push(m);
+                        if (m.userData?.overlay) _render_hoverCandidates.push(m.userData.overlay);
+                        if (Array.isArray(m.userData?.pillSprites)) {
+                            _render_hoverCandidates.push(...m.userData.pillSprites);
+                        }
+                    }
+                };
+                projectMoons.forEach(addMoon);
+                publicationsMoons.forEach(addMoon);
+                if (introSprite) _render_hoverCandidates.push(introSprite);
 
-                if (hoverCandidates.length) {
+                if (_render_hoverCandidates.length) {
                     raycaster.setFromCamera(pointer, camera);
-                    const intersects = raycaster.intersectObjects(hoverCandidates, false);
+                    const intersects = raycaster.intersectObjects(_render_hoverCandidates, false);
                     
                     let obj = null;
+                    let pillHoverIndex = -1;
+
                     for (const hit of intersects) {
-                        let candidate = hit.object;
-                        if (candidate.userData?.baseSprite) candidate = candidate.userData.baseSprite;
+                        const candidate = hit.object;
                         
+                        // 1. Pill Hit (Exact visual match)
+                        if (candidate.userData?.isPill) {
+                            obj = candidate.userData.parentMoon;
+                            pillHoverIndex = candidate.userData.pillIndex;
+                            break;
+                        }
+                        
+                        // 2. Intro Sprite (Legacy UV check)
                         if (candidate === introSprite) {
-                            // Only pick introSprite if hovering a link
                             const hotspots = candidate.userData.linkHotspots;
                             if (hotspots && hotspots.length && hit.uv) {
                                 const w = candidate.userData.canvasWidth;
                                 const h = candidate.userData.canvasHeight;
                                 const cx = hit.uv.x * w;
                                 const cy = (1 - hit.uv.y) * h;
-                                const isLink = hotspots.some(s => cx >= s.x && cx <= s.x + s.w && cy >= s.y && cy <= s.y + s.h);
-                                if (isLink) {
+                                const idx = hotspots.findIndex(s => cx >= s.x && cx <= s.x + s.w && cy >= s.y && cy <= s.y + s.h);
+                                if (idx !== -1) {
                                     obj = candidate;
+                                    pillHoverIndex = idx;
                                     break;
                                 }
                             }
-                        } else {
+                            continue;
+                        }
+
+                        // 3. Moon Overlay or Base
+                        if (candidate.userData?.baseSprite) {
+                            obj = candidate.userData.baseSprite;
+                            break;
+                        }
+                        // Ensure it's a valid moon object
+                        if (candidate.userData) {
                             obj = candidate;
                             break;
                         }
                     }
 
-                    // Determine pill hover for overlays with link buttons
-                    let pillHoverIndex = -1;
-                    if (obj) {
-                        const hotspots = obj?.userData?.linkHotspots;
-                        // Support both overlayCanvasSize (moons) and canvasWidth (intro)
-                        const canvasSize = obj?.userData?.overlayCanvasSize || obj?.userData?.canvasWidth;
-                        
-                        if (Array.isArray(hotspots) && hotspots.length && typeof canvasSize === "number") {
-                            const rect = renderer.domElement.getBoundingClientRect();
-                            const clientX = (pointer.x + 1) * 0.5 * rect.width + rect.left;
-                            const clientY = (-pointer.y + 1) * 0.5 * rect.height + rect.top;
-                            const toScreen = v3 => {
-                                const v = v3.clone().project(camera);
-                                return { x: (v.x * 0.5 + 0.5) * rect.width, y: (-v.y * 0.5 + 0.5) * rect.height };
-                            };
-                            const centerWorld = obj.getWorldPosition(new THREE.Vector3());
-                            const camX = new THREE.Vector3();
-                            const camY = new THREE.Vector3();
-                            const camZ = new THREE.Vector3();
-                            camera.matrixWorld.extractBasis(camX, camY, camZ);
-                            const halfW = (obj.scale.x || 1) * 0.5;
-                            const halfH = (obj.scale.y || 1) * 0.5;
-                            const pC = toScreen(centerWorld);
-                            const pR = toScreen(centerWorld.clone().add(camX.clone().multiplyScalar(halfW)));
-                            const pU = toScreen(centerWorld.clone().add(camY.clone().multiplyScalar(halfH)));
-                            const hwPx = Math.abs(pR.x - pC.x);
-                            const hhPx = Math.abs(pU.y - pC.y);
-                            const left = pC.x - hwPx;
-                            const top = pC.y - hhPx;
-                            const width = hwPx * 2;
-                            const height = hhPx * 2;
-                            const px = clientX - rect.left;
-                            const py = clientY - rect.top;
-                            if (px >= left && px <= left + width && py >= top && py <= top + height) {
-                                const u = (px - left) / Math.max(1, width);
-                                const v = (py - top) / Math.max(1, height);
-                                const cx = u * canvasSize;
-                                // For intro sprite, height might differ from width (non-square)
-                                // But existing logic assumes square canvasSize for both dimensions?
-                                // Let's check if we need separate height.
-                                const canvasH = obj?.userData?.canvasHeight || canvasSize;
-                                const cy = v * canvasH;
-                                
-                                const pad = Math.max(2, Math.round(canvasSize * 0.012));
-                                for (let i = 0; i < hotspots.length; i++) {
-                                    const h = hotspots[i];
-                                    if (cx >= h.x - pad && cx <= h.x + h.w + pad && cy >= h.y - pad && cy <= h.y + h.h + pad) {
-                                        pillHoverIndex = i;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    }
                     if (obj !== hoveredMoon) {
                         if (hoveredMoon) {
                             if (hoveredMoon.userData) hoveredMoon.userData.isHovered = false;
                             if (hoveredMoon.userData?.overlay?.material) gsap.to(hoveredMoon.userData.overlay.material, { opacity: 0, duration: 0.2, overwrite: true });
+                            // Fade out pills
+                            if (Array.isArray(hoveredMoon.userData?.pillSprites)) {
+                                hoveredMoon.userData.pillSprites.forEach(p => {
+                                    if (p.material) gsap.to(p.material, { opacity: 0, duration: 0.2, overwrite: true });
+                                });
+                            }
+                            
                             // Clear previous pill hover highlight if any
                             if (hoveredMoon.userData?.overlay?.userData?.draw) {
                                 hoveredMoon.userData.overlay.userData.hoverIndex = -1;
@@ -2683,11 +2750,25 @@ function render(now) {
                                 hoveredMoon.userData.overlay.renderOrder = 0;
                                 if (hoveredMoon.userData.overlay.material) hoveredMoon.userData.overlay.material.depthTest = true;
                             }
+                            // Reset pills
+                            if (Array.isArray(hoveredMoon.userData?.pillSprites)) {
+                                hoveredMoon.userData.pillSprites.forEach(p => {
+                                    p.renderOrder = 0;
+                                    if (p.material) p.material.depthTest = true;
+                                });
+                            }
                         }
                         hoveredMoon = obj;
                         if (hoveredMoon) {
                             if (hoveredMoon.userData) hoveredMoon.userData.isHovered = true;
                             if (hoveredMoon.userData?.overlay?.material) gsap.to(hoveredMoon.userData.overlay.material, { opacity: 1, duration: 0.2, overwrite: true });
+                            // Fade in pills
+                            if (Array.isArray(hoveredMoon.userData?.pillSprites)) {
+                                hoveredMoon.userData.pillSprites.forEach(p => {
+                                    if (p.material) gsap.to(p.material, { opacity: 1, duration: 0.2, overwrite: true });
+                                });
+                            }
+
                             // Bring to front
                             hoveredMoon.renderOrder = 9999;
                             if (hoveredMoon.material) hoveredMoon.material.depthTest = false;
@@ -2695,15 +2776,25 @@ function render(now) {
                                 hoveredMoon.userData.overlay.renderOrder = 10000;
                                 if (hoveredMoon.userData.overlay.material) hoveredMoon.userData.overlay.material.depthTest = false;
                             }
+                            // Bring pills to front
+                            if (Array.isArray(hoveredMoon.userData?.pillSprites)) {
+                                hoveredMoon.userData.pillSprites.forEach(p => {
+                                    p.renderOrder = 10001;
+                                    if (p.material) p.material.depthTest = false;
+                                });
+                            }
                         }
                     }
                     // Redraw overlay with hover style for pills (if present)
-                    if (obj && obj.userData?.overlay && typeof obj.userData.overlay.userData?.draw === "function") {
-                        const prevIdx = typeof obj.userData.overlay.userData.hoverIndex === "number" ? obj.userData.overlay.userData.hoverIndex : -1;
-                        if (prevIdx !== pillHoverIndex) {
-                            obj.userData.overlay.userData.hoverIndex = pillHoverIndex;
-                            obj.userData.overlay.userData.draw(pillHoverIndex);
-                        }
+                    if (obj && Array.isArray(obj.userData.pillSprites)) {
+                         obj.userData.pillSprites.forEach((pill, i) => {
+                             const isHover = (i === pillHoverIndex);
+                             // Only redraw if state changes
+                             if (pill.userData.isHover !== isHover) {
+                                 pill.userData.isHover = isHover;
+                                 pill.userData.setHover(isHover);
+                             }
+                         });
                     }
                     // Update cursor: pointer on pills; pointer on moon without pills; default otherwise
                     try {
@@ -2721,6 +2812,13 @@ function render(now) {
         } else if (!inside && hoveredMoon) {
             if (hoveredMoon.userData) hoveredMoon.userData.isHovered = false;
             if (hoveredMoon.userData?.overlay?.material) gsap.to(hoveredMoon.userData.overlay.material, { opacity: 0, duration: 0.2, overwrite: true });
+            // Fade out pills
+            if (Array.isArray(hoveredMoon.userData?.pillSprites)) {
+                hoveredMoon.userData.pillSprites.forEach(p => {
+                    if (p.material) gsap.to(p.material, { opacity: 0, duration: 0.2, overwrite: true });
+                });
+            }
+            
             if (hoveredMoon.userData?.overlay?.userData?.draw) {
                 hoveredMoon.userData.overlay.userData.hoverIndex = -1;
                 hoveredMoon.userData.overlay.userData.draw(-1);
@@ -2731,6 +2829,13 @@ function render(now) {
             if (hoveredMoon.userData?.overlay) {
                 hoveredMoon.userData.overlay.renderOrder = 0;
                 if (hoveredMoon.userData.overlay.material) hoveredMoon.userData.overlay.material.depthTest = true;
+            }
+            // Reset pills
+            if (Array.isArray(hoveredMoon.userData?.pillSprites)) {
+                hoveredMoon.userData.pillSprites.forEach(p => {
+                    p.renderOrder = 0;
+                    if (p.material) p.material.depthTest = true;
+                });
             }
             hoveredMoon = null;
             try {
@@ -2743,38 +2848,9 @@ function render(now) {
     }
 
     // Keep moons a constant size on screen: compute world scale from camera FOV and distance
-    const fovRad = (camera.fov * Math.PI) / 180;
-    const pxToWorld = dist => {
-        // worldUnitsPerPixel = (2 * dist * tan(fov/2)) / viewportHeightPixels
-        const worldPerPixel = (2 * dist * Math.tan(fovRad / 2)) / renderer.domElement.clientHeight;
-        return worldPerPixel;
-    };
-    const applyScreenSpaceScale = (arr, planetIndex) => {
-        if (!arr.length) return;
-        const planet = planets[planetIndex];
-        if (!planet) return;
-        arr.forEach(m => {
-            const bs = m.userData?.baseScale;
-            if (!bs) return;
-            const hf = m.userData?.isHovered ? 1.35 : 1.0;
-            if (m.userData?.lockScale && typeof m.userData.baseWorldSize === "number") {
-                // Keep the world size fixed (computed for final camera position), only apply hover multiplier
-                const w = m.userData.baseWorldSize * hf;
-                m.scale.set(w, w, 1);
-            } else {
-                // Fallback: constant-pixel sizing if not locked
-                const basePx = m.userData?.basePx || 64;
-                const camToMoon = camera.position.distanceTo(m.getWorldPosition(__vTemp3.set(0, 0, 0)));
-                const wpp = pxToWorld(camToMoon);
-                const targetWorldSize = basePx * wpp;
-                const sx = targetWorldSize * hf;
-                const sy = targetWorldSize * hf;
-                m.scale.set(sx, sy, 1);
-            }
-        });
-    };
-    applyScreenSpaceScale(projectMoons, 1);
-    applyScreenSpaceScale(publicationsMoons, 3);
+    const clientHeight = renderer.domElement.clientHeight;
+    applyScreenSpaceScale(projectMoons, 1, clientHeight);
+    applyScreenSpaceScale(publicationsMoons, 3, clientHeight);
 
     // Update intro sprite position and scale
     if (introSprite) {
@@ -2794,7 +2870,7 @@ function render(now) {
         const viewW = renderer.domElement.clientWidth;
         const targetPx = Math.max(400, Math.min(800, viewW * 0.9));
 
-        const wpp = pxToWorld(Math.abs(z));
+        const wpp = pxToWorld(Math.abs(z), clientHeight);
         const targetW = targetPx * wpp;
         
         // Use actual aspect ratio from userData if available, else default to 0.5 (2:1)
@@ -2860,6 +2936,56 @@ function render(now) {
                 __lastLowModeToggleAt = tNow;
             }
         }
+    }
+
+    // Update independent pill sprites to follow their parent moons
+    if (allPillSprites.length) {
+        // Extract camera basis from matrixWorld
+        const e = camera.matrixWorld.elements;
+        _render_camRight.set(e[0], e[1], e[2]);
+        _render_camUp.set(e[4], e[5], e[6]);
+        _render_camBack.set(e[8], e[9], e[10]); // Points towards camera
+
+        allPillSprites.forEach(p => {
+            const moon = p.userData.parentMoon;
+            if (!moon || !moon.visible) {
+                p.visible = false;
+                return;
+            }
+            // Sync visibility
+            p.visible = true;
+            // Do NOT sync opacity here; let GSAP handle hover fade in/out
+            // if (p.material && moon.material) {
+            //    p.material.opacity = moon.material.opacity;
+            // }
+            
+            // Calculate world position
+            // P_world = Moon_world + (Right * sx * scaleX) + (Up * sy * scaleY)
+            const scaleX = moon.scale.x;
+            const scaleY = moon.scale.y;
+            
+            const sx = p.userData.sx;
+            const sy = p.userData.sy;
+            
+            // Start at moon position
+            moon.getWorldPosition(__vTemp3);
+            p.position.copy(__vTemp3);
+            
+            // Add offsets along camera plane vectors
+            p.position.addScaledVector(_render_camRight, sx * scaleX);
+            p.position.addScaledVector(_render_camUp, sy * scaleY);
+            
+            // Nudge towards camera to ensure it sits on top of the overlay
+            // Overlay is at z=0.01 local to moon.
+            // We want pills at z=0.02 local to moon.
+            // 0.02 * scaleX (approx)
+            p.position.addScaledVector(_render_camBack, 0.02 * scaleX);
+
+            // Update scale
+            const wRatio = p.userData.wRatio;
+            const hRatio = p.userData.hRatio;
+            p.scale.set(wRatio * scaleX, hRatio * scaleY, 1);
+        });
     }
 
     controls.update();
