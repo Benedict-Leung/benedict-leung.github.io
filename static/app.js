@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
+let introSprite = null;
+
 // =============================
 // Utilities (helpers first)
 // =============================
@@ -138,6 +140,233 @@ function makeCanvasTexture(w, h, draw, colorSpace = THREE.SRGBColorSpace) {
     tex.needsUpdate = true;
     tex.colorSpace = colorSpace;
     return tex;
+}
+
+function updateIntroSprite(title, text) {
+    if (!introSprite) return;
+    
+    let tex = introSprite.material.map;
+    let c = tex ? tex.image : null;
+    
+    if (!c) {
+        c = document.createElement("canvas");
+        c.width = 1024;
+        c.height = 512;
+        tex = new THREE.CanvasTexture(c);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.minFilter = THREE.LinearFilter;
+        tex.magFilter = THREE.LinearFilter;
+        introSprite.material.map = tex;
+    }
+    
+    const ctx = c.getContext("2d");
+    
+    // Measure text first to determine height
+    ctx.font = "20px system-ui, Segoe UI, Roboto, Arial";
+    
+    let lines = [];
+    const w = 1024; // Fixed width base
+    const maxW = w * 0.9;
+    
+    if (text) {
+        const tokens = parseTextWithLinks(text);
+        
+        let currentLine = [];
+        let currentLineWidth = 0;
+        
+        let allWords = [];
+        tokens.forEach(token => {
+            if (token.isNewline) {
+                allWords.push({ isNewline: true });
+                return;
+            }
+            const tokenWords = token.text.split(" ");
+            tokenWords.forEach((word, i) => {
+                const suffix = (i < tokenWords.length - 1) ? " " : "";
+                allWords.push({
+                    text: word + suffix,
+                    href: token.href,
+                    isLink: token.isLink,
+                    align: token.align
+                });
+            });
+        });
+
+        allWords.forEach(item => {
+            if (item.isNewline) {
+                if (currentLine.length > 0) {
+                    currentLine.forcedBreak = true;
+                    currentLine.align = currentLine[0].align;
+                    lines.push(currentLine);
+                } else {
+                    // Push empty line for consecutive newlines
+                    lines.push([]);
+                }
+                currentLine = [];
+                currentLineWidth = 0;
+                return;
+            }
+
+            const wordWidth = ctx.measureText(item.text).width;
+            
+            if (currentLineWidth + wordWidth > maxW && currentLine.length > 0) {
+                currentLine.align = currentLine[0].align;
+                lines.push(currentLine);
+                currentLine = [];
+                currentLineWidth = 0;
+            }
+            
+            currentLine.push({
+                ...item,
+                width: wordWidth
+            });
+            currentLineWidth += wordWidth;
+        });
+        if (currentLine.length > 0) {
+            currentLine.forcedBreak = true;
+            currentLine.align = currentLine[0].align;
+            lines.push(currentLine);
+        }
+    }
+    
+    // Calculate required height
+    const lineHeight = 28;
+    const titleHeight = 100; // Space for title
+    const textHeight = lines.length * lineHeight;
+    const totalHeight = Math.max(512, titleHeight + textHeight + 100);
+    
+    if (c.height !== totalHeight) {
+        c.height = totalHeight;
+        // Dispose old texture to avoid GL errors on resize
+        tex.dispose();
+        tex = new THREE.CanvasTexture(c);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.minFilter = THREE.LinearFilter;
+        tex.magFilter = THREE.LinearFilter;
+        introSprite.material.map = tex;
+    }
+    
+    const h = c.height;
+    ctx.clearRect(0, 0, w, h);
+    
+    // Calculate content height for vertical centering
+    const titleH = title ? 50 : 0;
+    const gap = (title && lines.length > 0) ? 30 : 0;
+    const textH = lines.length * lineHeight;
+    const contentHeight = titleH + gap + textH;
+    const startY = (h - contentHeight) / 2;
+
+    // Title
+    ctx.fillStyle = "white";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetY = 6;
+    
+    ctx.font = "bold 50px system-ui, Segoe UI, Roboto, Arial";
+    let currentY = startY;
+    
+    if (title) {
+        ctx.fillText(title, w / 2, currentY + 25);
+        currentY += 50;
+    }
+    
+    // Subtitle
+    const hotspots = [];
+    if (lines.length > 0) {
+        if (title) currentY += gap;
+        
+        ctx.font = "20px system-ui, Segoe UI, Roboto, Arial";
+        let y = currentY + lineHeight / 2;
+        
+        lines.forEach(line => {
+            const lineWidth = line.reduce((sum, item) => sum + item.width, 0);
+            let x;
+            let extraSpace = 0;
+            const lineAlign = line.align || "center";
+
+            if (lineAlign === "justify") {
+                x = (w - maxW) / 2;
+                if (!line.forcedBreak && line.length > 1) {
+                    extraSpace = (maxW - lineWidth) / (line.length - 1);
+                }
+            } else {
+                // Center (default)
+                x = (w - lineWidth) / 2;
+            }
+            
+            line.forEach((item, i) => {
+                ctx.fillStyle = item.isLink ? "#ffec8b" : "white";
+                ctx.textAlign = "left";
+                ctx.fillText(item.text, x, y);
+                
+                if (item.isLink) {
+                    ctx.fillRect(x, y + 18, item.width, 2);
+                    hotspots.push({
+                        x: x,
+                        y: y - 18,
+                        w: item.width,
+                        h: 28,
+                        href: item.href
+                    });
+                }
+                x += item.width;
+                if (lineAlign === "justify" && !line.forcedBreak && line.length > 1 && i < line.length - 1) {
+                    x += extraSpace;
+                }
+            });
+            y += lineHeight;
+        });
+    }
+    
+    tex.needsUpdate = true;
+    
+    // Update Sprite Scale to match aspect ratio
+    // Base scale.x is 1. scale.y should be h/w.
+    introSprite.scale.set(1, h / w, 1);
+    
+    introSprite.userData.linkHotspots = hotspots;
+    introSprite.userData.canvasWidth = w;
+    introSprite.userData.canvasHeight = h;
+}
+
+function parseTextWithLinks(text) {
+    const tokens = [];
+    const div = document.createElement("div");
+    div.innerHTML = text;
+    
+    function traverse(node, currentAlign) {
+        if (node.nodeType === 3) { // Text node
+            tokens.push({ text: node.nodeValue, href: null, align: currentAlign });
+        } else if (node.nodeType === 1) { // Element
+            let newAlign = currentAlign;
+            if (node.style && node.style.textAlign) {
+                newAlign = node.style.textAlign;
+            }
+
+            const tagName = node.tagName;
+            if (tagName === "BR") {
+                tokens.push({ isNewline: true });
+            } else if (tagName === "DIV" || tagName === "P") {
+                if (tokens.length > 0 && !tokens[tokens.length - 1].isNewline) {
+                    tokens.push({ isNewline: true });
+                }
+                node.childNodes.forEach(child => traverse(child, newAlign));
+                if (tokens.length > 0 && !tokens[tokens.length - 1].isNewline) {
+                    tokens.push({ isNewline: true });
+                }
+            } else if (tagName === "A") {
+                const href = node.getAttribute("href");
+                tokens.push({ text: node.textContent, href: href, isLink: true, align: newAlign });
+            } else {
+                node.childNodes.forEach(child => traverse(child, newAlign));
+            }
+        }
+    }
+    
+    div.childNodes.forEach(child => traverse(child, "center"));
+    return tokens;
 }
 
 // Approximate a height (bump) map from a tangent-space normal map by integrating gradients.
@@ -433,6 +662,16 @@ let __orbitsFrozen = true;
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 5000);
 camera.position.set(0, 800, 0);
 camera.lookAt(0, 0, 0);
+scene.add(camera); // Add camera to scene so children are rendered
+
+// Create intro sprite
+{
+    const mat = new THREE.SpriteMaterial({ transparent: true, depthTest: true, depthWrite: false });
+    introSprite = new THREE.Sprite(mat);
+    introSprite.center.set(0.5, 0.5);
+    introSprite.scale.set(1, 0.5, 1); // Aspect ratio 2:1
+    camera.add(introSprite);
+}
 // Ensure camera sees both default layer 0 and our Mars-only lighting layer 1
 try {
     camera.layers.enable(1);
@@ -650,8 +889,27 @@ function createProjectSprite(imgPath, onReady) {
             const sx = Math.max(0, (img.width - s) / 2);
             const sy = Math.max(0, (img.height - s) / 2);
             ctx.drawImage(img, sx, sy, s, s, 0, 0, size, size);
-            ctx.fillStyle = "rgba(0,0,0,0.18)";
+            
+            // Spherical shading to make it look more like a moon
+            const grad = ctx.createRadialGradient(
+                size * 0.35, size * 0.35, size * 0.05, 
+                size * 0.5, size * 0.5, size * 0.5
+            );
+            grad.addColorStop(0, "rgba(255, 255, 255, 0.15)");
+            grad.addColorStop(0.5, "rgba(0, 0, 0, 0)");
+            grad.addColorStop(0.85, "rgba(0, 0, 0, 0.4)");
+            grad.addColorStop(1, "rgba(0, 0, 0, 0.8)");
+            
+            ctx.fillStyle = grad;
             ctx.fillRect(0, 0, size, size);
+
+            // Subtle rim
+            ctx.beginPath();
+            ctx.arc(size / 2, size / 2, size / 2 - 1, 0, Math.PI * 2);
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+            ctx.stroke();
+
             ctx.restore();
             const circTex = new THREE.CanvasTexture(c);
             circTex.minFilter = THREE.LinearMipmapLinearFilter;
@@ -767,7 +1025,7 @@ function loadRealMercuryTextures(planet) {
         tex.needsUpdate = true;
         return tex;
     };
-    const pMercCol = loadTextureFast(base + "mercurymap.jpg", { color: true, wrapRepeat: true, preferMipmaps: true }).then(tex => {
+    const pMercCol = loadTextureFast(base + "mercurymap2.jpg", { color: true, wrapRepeat: true, preferMipmaps: true }).then(tex => {
         if (tex) {
             mat.map = tex;
             mat.needsUpdate = true;
@@ -849,149 +1107,183 @@ function attachOverlayToSprite(sprite, label, description, links) {
         const ctx = c.getContext("2d");
         // Draw in CSS pixel coordinates while the bitmap is HiDPI
         ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+        // --- Static Content Optimization ---
+        const staticCanvas = document.createElement("canvas");
+        staticCanvas.width = c.width;
+        staticCanvas.height = c.height;
+        const staticCtx = staticCanvas.getContext("2d");
+        staticCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
         // Ratio so circle scales with moon, but text/pills stay at 128px baseline
         const S = BASE_OVERLAY_PX; // baseline design space for typography/pills
         const ratio = size / S; // how much larger/smaller than 128px the moon/overlay is
+
+        // 1) Background circle: scale with moon using ratio
+        staticCtx.save();
+        staticCtx.scale(ratio, ratio);
+        staticCtx.fillStyle = "rgba(14, 15, 17, 0.62)";
+        staticCtx.beginPath();
+        staticCtx.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2);
+        staticCtx.fill();
+        staticCtx.restore();
+
+        // 2) Typography and pills: lock to baseline 128px regardless of overlay size
+        staticCtx.fillStyle = "#fff";
+        staticCtx.textAlign = "center";
+        staticCtx.textBaseline = "alphabetic";
+        // keep light shadow for main title/desc only (reduce cost)
+        staticCtx.shadowColor = "rgba(0,0,0,0.55)";
+        staticCtx.shadowBlur = Math.max(1, Math.round(S * 0.01));
+        staticCtx.shadowOffsetY = Math.round(S * 0.01);
+
+        // Label: move slightly higher and auto-shrink font until it fits within 4 lines
+        const maxWLabel = Math.round(S * ratio * 0.78);
+        const maxLabelLines = 4;
+        const minFontPx = Math.round(S * 0.02);
+        let fontPx = Math.round(S * 0.12);
+        let labelLines = [];
+        const wrapWithFont = (text, fontPxLocal) => {
+            staticCtx.font = `${fontPxLocal}px sans-serif`;
+            const words = String(text || "").split(/\s+/);
+            const lines = [];
+            let cur = "";
+            for (let i = 0; i < words.length; i++) {
+                const test = cur ? cur + " " + words[i] : words[i];
+                if (staticCtx.measureText(test).width > maxWLabel && cur) {
+                    lines.push(cur);
+                    cur = words[i];
+                } else {
+                    cur = test;
+                }
+            }
+            if (cur) lines.push(cur);
+            return lines;
+        };
+        // Try to fit within maxLabelLines by shrinking fontPx
+        for (;;) {
+            labelLines = wrapWithFont(label, fontPx);
+            if (labelLines.length <= maxLabelLines || fontPx <= minFontPx) break;
+            fontPx = Math.max(minFontPx, fontPx - 1);
+        }
+        // If still overflowing at min font size, do NOT ellipsize; render all lines (may overflow)
+        const labelLineH = Math.round(fontPx * 1.15);
+        let yLabel = Math.round(size * 0.26); // moved higher vs 0.48
+        for (let i = 0; i < labelLines.length; i++) {
+            staticCtx.fillText(labelLines[i], size / 2, yLabel + i * labelLineH);
+        }
+        const labelEndY = yLabel + Math.max(1, labelLines.length) * labelLineH;
+
+        // Description: start below label block (or fallback to baseline position)
+        if (description) {
+            staticCtx.font = `${Math.min(Math.round(fontPx - 2), Math.round(S * 0.07))}px sans-serif`;
+            const words = String(description).split(" ");
+            let line = "";
+            const maxW = Math.round(S * ratio * 0.78); // wrap width in baseline pixels
+            const descLineH = Math.round(S * 0.095);
+            let y = Math.max(Math.round(size * 0.62), labelEndY + Math.round(S * 0.08));
+            for (let i = 0; i < words.length; i++) {
+                const test = line ? line + " " + words[i] : words[i];
+                if (staticCtx.measureText(test).width > maxW) {
+                    staticCtx.fillText(line, size / 2, y);
+                    line = words[i];
+                    y += descLineH;
+                } else {
+                    line = test;
+                }
+            }
+            if (line) staticCtx.fillText(line, size / 2, y);
+        }
+
+        // Pre-calculate link metrics
+        let pillData = [];
+        let linkHotspotsStatic = null;
+        
+        if (Array.isArray(links) && links.length) {
+            const padX = Math.round(S * 0.034);
+            const gap = Math.round(S * 0.02);
+            const pillH = Math.round(labelLineH);
+            // Use staticCtx for measurement
+            staticCtx.font = `${Math.min(Math.round(fontPx - 2), Math.round(S * 0.07))}px sans-serif`;
+            
+            const metrics = links.map(l => {
+                const t = String(l?.text ?? "");
+                const w = Math.ceil(staticCtx.measureText(t).width) + padX * 2;
+                return { text: t, href: l?.href, w };
+            });
+            const totalW = metrics.reduce((a, m) => a + m.w, 0) + gap * Math.max(0, metrics.length - 1);
+            let x = Math.round((size - totalW) / 2);
+            const yTop = Math.round(size * 0.82);
+            
+            linkHotspotsStatic = [];
+            pillData = [];
+
+            metrics.forEach((m, i) => {
+                const r = Math.round(pillH / 2);
+                const w = m.w;
+                const h = pillH;
+                const y = yTop;
+                
+                pillData.push({
+                    x, y, w, h, r,
+                    text: m.text,
+                    font: staticCtx.font // Store font to use in drawOverlay
+                });
+                
+                linkHotspotsStatic.push({ x, y, w, h, href: m.href, text: m.text });
+                x += w + gap;
+            });
+        }
+
         // Draw function so we can re-render on hover state
         const drawOverlay = (hoverIndex = -1) => {
+            // Draw static content
             ctx.save();
-            ctx.clearRect(0, 0, size, size);
-            // 1) Background circle: scale with moon using ratio
-            ctx.save();
-            ctx.scale(ratio, ratio);
-            ctx.fillStyle = "rgba(12,24,52,0.62)";
-            ctx.beginPath();
-            ctx.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.clearRect(0, 0, c.width, c.height);
+            ctx.drawImage(staticCanvas, 0, 0);
             ctx.restore();
 
-            // 2) Typography and pills: lock to baseline 128px regardless of overlay size
-            ctx.fillStyle = "#fff";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "alphabetic";
-            // keep light shadow for main title/desc only (reduce cost)
-            ctx.shadowColor = "rgba(0,0,0,0.55)";
-            ctx.shadowBlur = Math.max(1, Math.round(S * 0.01));
-            ctx.shadowOffsetY = Math.round(S * 0.01);
-            // Label: move slightly higher and auto-shrink font until it fits within 4 lines
-            const maxWLabel = Math.round(S * ratio * 0.78);
-            const maxLabelLines = 4;
-            const minFontPx = Math.round(S * 0.02);
-            let fontPx = Math.round(S * 0.12);
-            let labelLines = [];
-            const wrapWithFont = (text, fontPxLocal) => {
-                ctx.font = `${fontPxLocal}px sans-serif`;
-                const words = String(text || "").split(/\s+/);
-                const lines = [];
-                let cur = "";
-                for (let i = 0; i < words.length; i++) {
-                    const test = cur ? cur + " " + words[i] : words[i];
-                    if (ctx.measureText(test).width > maxWLabel && cur) {
-                        lines.push(cur);
-                        cur = words[i];
-                    } else {
-                        cur = test;
-                    }
-                }
-                if (cur) lines.push(cur);
-                return lines;
-            };
-            // Try to fit within maxLabelLines by shrinking fontPx
-            for (;;) {
-                labelLines = wrapWithFont(label, fontPx);
-                if (labelLines.length <= maxLabelLines || fontPx <= minFontPx) break;
-                fontPx = Math.max(minFontPx, fontPx - 1);
-            }
-            // If still overflowing at min font size, do NOT ellipsize; render all lines (may overflow)
-            const labelLineH = Math.round(fontPx * 1.15);
-            let yLabel = Math.round(size * 0.26); // moved higher vs 0.48
-            for (let i = 0; i < labelLines.length; i++) {
-                ctx.fillText(labelLines[i], size / 2, yLabel + i * labelLineH);
-            }
-            const labelEndY = yLabel + Math.max(1, labelLines.length) * labelLineH;
-
-            // Description: start below label block (or fallback to baseline position)
-            if (description) {
-                ctx.font = `${Math.min(Math.round(fontPx - 2), Math.round(S * 0.07))}px sans-serif`;
-                const words = String(description).split(" ");
-                let line = "";
-                const maxW = Math.round(S * ratio * 0.78); // wrap width in baseline pixels
-                const descLineH = Math.round(S * 0.095);
-                let y = Math.max(Math.round(size * 0.62), labelEndY + Math.round(S * 0.08));
-                for (let i = 0; i < words.length; i++) {
-                    const test = line ? line + " " + words[i] : words[i];
-                    if (ctx.measureText(test).width > maxW) {
-                        ctx.fillText(line, size / 2, y);
-                        line = words[i];
-                        y += descLineH;
-                    } else {
-                        line = test;
-                    }
-                }
-                if (line) ctx.fillText(line, size / 2, y);
-            }
-            // Optional link badges at the bottom (e.g., PDF, Poster, Code)
-            let linkHotspotsLocal = null;
-            if (Array.isArray(links) && links.length) {
-                const padX = Math.round(S * 0.034);
-                const gap = Math.round(S * 0.02);
-                const pillH = Math.round(labelLineH);
-                ctx.font = `${Math.min(Math.round(fontPx - 2), Math.round(S * 0.07))}px sans-serif`;
-                const metrics = links.map(l => {
-                    const t = String(l?.text ?? "");
-                    const w = Math.ceil(ctx.measureText(t).width) + padX * 2;
-                    return { text: t, href: l?.href, w };
-                });
-                const totalW = metrics.reduce((a, m) => a + m.w, 0) + gap * Math.max(0, metrics.length - 1);
-                let x = Math.round((size - totalW) / 2);
-                const yTop = Math.round(size * 0.82);
-                linkHotspotsLocal = [];
+            // Draw pills
+            if (pillData.length) {
+                ctx.save();
                 // Pills: draw without shadows to keep hover cheap
-                const savedShadowBlur = ctx.shadowBlur;
-                const savedShadowColor = ctx.shadowColor;
-                const savedBaseline = ctx.textBaseline;
                 ctx.shadowBlur = 0;
                 ctx.shadowColor = "transparent";
                 ctx.lineWidth = Math.max(1, Math.round(S * 0.006));
-                metrics.forEach((m, i) => {
-                    const r = Math.round(pillH / 2);
-                    const w = m.w;
-                    const h = pillH;
-                    const y = yTop;
-                    // hover styles
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                
+                pillData.forEach((p, i) => {
+                    ctx.font = p.font;
                     const isHover = i === hoverIndex;
                     ctx.fillStyle = isHover ? "rgba(255,255,255,0.30)" : "rgba(255,255,255,0.12)";
                     ctx.strokeStyle = isHover ? "#ffffff" : "rgba(255,255,255,0.28)";
+                    
                     // rounded rect
                     ctx.beginPath();
-                    ctx.moveTo(x + r, y);
-                    ctx.lineTo(x + w - r, y);
-                    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-                    ctx.lineTo(x + w, y + h - r);
-                    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-                    ctx.lineTo(x + r, y + h);
-                    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-                    ctx.lineTo(x, y + r);
-                    ctx.quadraticCurveTo(x, y, x + r, y);
+                    ctx.moveTo(p.x + p.r, p.y);
+                    ctx.lineTo(p.x + p.w - p.r, p.y);
+                    ctx.quadraticCurveTo(p.x + p.w, p.y, p.x + p.w, p.y + p.r);
+                    ctx.lineTo(p.x + p.w, p.y + p.h - p.r);
+                    ctx.quadraticCurveTo(p.x + p.w, p.y + p.h, p.x + p.w - p.r, p.y + p.h);
+                    ctx.lineTo(p.x + p.r, p.y + p.h);
+                    ctx.quadraticCurveTo(p.x, p.y + p.h, p.x, p.y + p.h - p.r);
+                    ctx.lineTo(p.x, p.y + p.r);
+                    ctx.quadraticCurveTo(p.x, p.y, p.x + p.r, p.y);
                     ctx.closePath();
                     ctx.fill();
                     if (isHover) ctx.stroke();
+                    
                     // text
                     ctx.fillStyle = "#fff";
-                    ctx.textAlign = "center";
-                    ctx.textBaseline = "middle";
-                    ctx.fillText(m.text, x + w / 2, y + h / 2 + 1);
-                    linkHotspotsLocal.push({ x, y, w, h, href: m.href, text: m.text });
-                    x += w + gap;
+                    ctx.fillText(p.text, p.x + p.w / 2, p.y + p.h / 2 + 1);
                 });
-                // restore shadow
-                ctx.shadowBlur = savedShadowBlur;
-                ctx.shadowColor = savedShadowColor;
-                ctx.textBaseline = savedBaseline;
+                ctx.restore();
             }
-            ctx.restore();
-            return linkHotspotsLocal;
+            return linkHotspotsStatic;
         };
+
         // Initial draw
         let linkHotspots = drawOverlay(-1) || null;
         const overlayTex = new THREE.CanvasTexture(c);
@@ -1049,17 +1341,58 @@ scene.add(new THREE.AmbientLight(0xffffff, 0.28));
 
 // starfield
 (function makeStarField() {
-    const geo = new THREE.BufferGeometry();
-    const count = __isLowTier ? 1200 : 3000;
-    const pos = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
-        pos[i * 3 + 0] = (Math.random() - 0.5) * 3000;
-        pos[i * 3 + 1] = (Math.random() - 0.5) * 3000;
-        pos[i * 3 + 2] = (Math.random() - 0.5) * 3000;
-    }
-    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-    const mat = new THREE.PointsMaterial({ size: __isLowTier ? 1.0 : 1.2, color: 0xffffff, transparent: true, opacity: 0.95 });
-    scene.add(new THREE.Points(geo, mat));
+    const layers = [
+        { count: __isLowTier ? 2000 : 5000, size: 1.5, opacity: 0.6 }, // Faint background stars
+        { count: __isLowTier ? 500 : 1500, size: 2.5, opacity: 0.8 },  // Medium stars
+        { count: __isLowTier ? 50 : 200, size: 3.5, opacity: 1.0 }     // Bright stars
+    ];
+
+    layers.forEach(layer => {
+        const geo = new THREE.BufferGeometry();
+        const pos = [];
+        const colors = [];
+        const color = new THREE.Color();
+        const r = 4000;
+
+        for (let i = 0; i < layer.count; i++) {
+            // Spherical distribution
+            const theta = 2 * Math.PI * Math.random();
+            const phi = Math.acos(2 * Math.random() - 1);
+            const dist = r + (Math.random() - 0.5) * 500;
+
+            const x = dist * Math.sin(phi) * Math.cos(theta);
+            const y = dist * Math.sin(phi) * Math.sin(theta);
+            const z = dist * Math.cos(phi);
+
+            pos.push(x, y, z);
+
+            // Color variation
+            const starType = Math.random();
+            // 70% white, 20% blue-ish, 10% yellow/red-ish
+            if (starType > 0.9) {
+                color.setHex(0xffddaa); // Yellow/Orange
+            } else if (starType > 0.7) {
+                color.setHex(0xaaaaff); // Blue-ish
+            } else {
+                color.setHex(0xffffff); // White
+            }
+            
+            colors.push(color.r, color.g, color.b);
+        }
+
+        geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+        geo.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+
+        const mat = new THREE.PointsMaterial({
+            size: layer.size,
+            vertexColors: true,
+            transparent: true,
+            opacity: layer.opacity,
+            sizeAttenuation: false // Constant pixel size
+        });
+
+        scene.add(new THREE.Points(geo, mat));
+    });
 })();
 
 // (Removed legacy keyStars/keyData; navigation uses planet focus directly)
@@ -1118,10 +1451,7 @@ const planetSpecs = [
     { name: "Earth", r: 13, dist: 160, speed: 0.012, color: 0x6ea8ff, e: 0.0167, incDeg: 0.0, OmegaDeg: 0.0, omegaDeg: 102.937, tiltDeg: 23.44, dayLengthDays: 0.99726968 },
     { name: "Mars", r: 13 * 0.532, dist: Math.round(160 * 1.524), speed: 0.012 * (365.256 / 686.98), color: 0xff6f4c, e: 0.0934, incDeg: 1.85, OmegaDeg: 49.558, omegaDeg: 286.5, tiltDeg: 25.19, dayLengthDays: 1.025957 },
 ];
-function pickTextureSizes() {
-    return __isLowTier ? { cloudW: 512, cloudH: 256 } : { cloudW: 1024, cloudH: 512 };
-}
-const TEX_SIZES = pickTextureSizes();
+
 // Feature flag to toggle cloud generation globally
 const ENABLE_CLOUDS = true;
 
@@ -1352,25 +1682,15 @@ function animateCameraTo(destPos, destTarget, duration = 1.6, onComplete = null,
     });
 }
 
-const centerTitle = document.getElementById("centerTitle");
-const centerText = document.getElementById("centerText");
-function setCenter(title, text) {
-    if (centerTitle) centerTitle.textContent = title;
-    if (centerText) {
-        const s = String(text ?? "");
-        if (/<\s*[^>]+>/i.test(s)) {
-            centerText.innerHTML = s;
-        } else {
-            centerText.textContent = s;
-        }
-    }
-}
+
 
 let followTarget = null;
 let followOffset = new THREE.Vector3(0, 18, 60);
+let currentFocusR = 30; // Default to Sun/Overview radius
 
 function focusPlanet(i, onFocused) {
     if (i === "overview") {
+        currentFocusR = 30;
         followTarget = null;
         __stopFollowingMode();
         animateCameraTo(new THREE.Vector3(0, 800, 0), new THREE.Vector3(0, 0, 0), 1.4);
@@ -1380,9 +1700,17 @@ function focusPlanet(i, onFocused) {
     if (!p) return;
     // Make the camera closer for smaller planets by scaling the follow offset with radius
     const r = p.spec && p.spec.r ? p.spec.r : 13; // fallback to Earth scale if missing
-    const oy = Math.max(4, Math.min(24, r * 1.5));
-    const oz = Math.max(18, Math.min(110, r * 5.0));
-    followOffset.set(0, oy, oz);
+    currentFocusR = r;
+    
+    // Calculate distance so planet takes up 50% of screen's minimum dimension
+    const vFOV = (camera.fov * Math.PI) / 180;
+    let tanHalf = Math.tan(vFOV / 2);
+    if (camera.aspect < 1) tanHalf *= camera.aspect;
+    const dist = (2 * r) / tanHalf;
+    const dir = new THREE.Vector3(0, 1.5, 5.0).normalize();
+    const offset = dir.multiplyScalar(dist);
+    
+    followOffset.copy(offset);
     followTarget = p.mesh;
     __startFollowingMode();
     const getTarget = () => p.mesh.getWorldPosition(new THREE.Vector3());
@@ -1423,15 +1751,16 @@ function randomizeMoonsOffsets(arr, planetIndex, frontDir, thetaPhase = 0) {
     __tmpCam.updateProjectionMatrix();
     __tmpCam.position.copy(camFinalPos);
     __tmpCam.lookAt(planetWorld);
-    // Prepare camera basis for projecting sprite-aligned quads
-    const camX = new THREE.Vector3();
-    const camY = new THREE.Vector3();
-    const camZ = new THREE.Vector3();
-    __tmpCam.matrixWorld.extractBasis(camX, camY, camZ);
-    const NDC_PAD = 0.98; // keep a small border so pills don’t clip
+    __tmpCam.updateMatrixWorld(); // Ensure matrixWorld is up to date for project/unproject
+    __tmpCam.matrixWorldInverse.copy(__tmpCam.matrixWorld).invert();
 
     const goldenAngle = Math.PI * (3 - Math.sqrt(5));
     const n = arr.length;
+    
+    // 1. Initial Placement (Golden Spiral)
+    let moonData = [];
+    const viewH = Math.max(1, renderer?.domElement?.clientHeight || window.innerHeight || 1);
+
     for (let k = 0; k < n; k++) {
         const t = (k + 0.5) / n;
         const y = 1 - t;
@@ -1442,51 +1771,111 @@ function randomizeMoonsOffsets(arr, planetIndex, frontDir, thetaPhase = 0) {
             .addScaledVector(up, r * Math.sin(theta))
             .addScaledVector(forward, y)
             .normalize();
-        let radius = Rmid * (0.9 + Math.random() * 0.2);
+        
+        // Start with a generous radius
+        let radius = Rmid;
         let offset = dir.clone().multiplyScalar(radius);
-        // If the projected sprite quad would be off-screen, gently push it toward the planet
-        // by shrinking the radius until it fits, but never below a safe minimum.
-        const minRadius = host.spec.r * 1.7; // don’t let moons get too close to the surface
-        let attempts = 24;
-        while (attempts-- > 0) {
-            // Estimate the sprite’s world half-size at this camera distance using its target pixel size
-            const sprite = arr[k];
-            const pxTarget = Math.max(48, Math.min(512, (sprite?.userData?.overlayPx || sprite?.userData?.basePx || 128) * 1.15));
-            const centerWorld = planetWorld.clone().add(offset);
-            const dist = __tmpCam.position.distanceTo(centerWorld);
-            const viewH = Math.max(1, renderer?.domElement?.clientHeight || window.innerHeight || 1);
-            const worldPerPixel = (2 * dist * Math.tan((__tmpCam.fov * Math.PI) / 180 / 2)) / viewH;
-            const halfW = pxTarget * worldPerPixel * 0.6;
-            const halfH = halfW; // sprites are square
-            // Build four corners aligned to camera axes
-            const c = centerWorld;
-            const r = camX.clone().multiplyScalar(halfW);
-            const u = camY.clone().multiplyScalar(halfH);
-            const corners = [c.clone().add(r).add(u), c.clone().add(r).sub(u), c.clone().sub(r).add(u), c.clone().sub(r).sub(u)];
-            let minX = Infinity,
-                maxX = -Infinity,
-                minY = Infinity,
-                maxY = -Infinity;
-            let allDepthOk = true;
-            for (let ci = 0; ci < corners.length; ci++) {
-                const v = corners[ci].clone().project(__tmpCam);
-                if (v.z < -1 || v.z > 1) {
-                    allDepthOk = false;
-                    break;
-                }
-                if (v.x < minX) minX = v.x;
-                if (v.x > maxX) maxX = v.x;
-                if (v.y < minY) minY = v.y;
-                if (v.y > maxY) maxY = v.y;
-            }
-            const fits = allDepthOk && minX >= -NDC_PAD && maxX <= NDC_PAD && minY >= -NDC_PAD && maxY <= NDC_PAD;
-            if (fits) break;
-            const next = Math.max(minRadius, offset.length() * 0.92);
-            if (next >= offset.length() - 1e-6) break; // no further progress
-            offset.setLength(next);
-        }
-        arr[k].userData.offset = offset;
+        
+        // Estimate sprite NDC size
+        const sprite = arr[k];
+        const pxTarget = Math.max(512, Math.min(512, (sprite?.userData?.overlayPx || sprite?.userData?.basePx || 128) * 4.5));
+        // NDC height is 2.0. Size fraction = pxTarget / viewH.
+        // Use a slightly larger margin for safety
+        const ndcRadius = (pxTarget / viewH) * 1.2; 
+
+        moonData.push({
+            id: k,
+            offset: offset,
+            ndcRadius: ndcRadius,
+            sprite: sprite
+        });
     }
+
+    // 2. Iterative Relaxation in Screen Space
+    // Move moons in X-Y screen coordinates to satisfy constraints:
+    // - Inside screen bounds (0.9 NDC)
+    // - Outside planet radius (~0.6 NDC)
+    // - Separated from each other
+    const iterations = 15;
+    const planetNDCRadius = 0.6; // Planet radius ~0.5 + margin
+    const screenNDCBound = 0.85;  // Keep inside 0.9
+    
+    for (let iter = 0; iter < iterations; iter++) {
+        // Project all to NDC
+        moonData.forEach(m => {
+            const centerWorld = planetWorld.clone().add(m.offset);
+            m.ndc = centerWorld.clone().project(__tmpCam);
+        });
+
+        // Calculate forces
+        moonData.forEach(m => {
+            let fx = 0, fy = 0;
+            
+            // A. Planet Repulsion
+            const distToCenter = Math.sqrt(m.ndc.x * m.ndc.x + m.ndc.y * m.ndc.y);
+            const minPlanetDist = planetNDCRadius + m.ndcRadius * 0.5;
+            if (distToCenter < minPlanetDist) {
+                const pushDirX = distToCenter > 0 ? m.ndc.x / distToCenter : (Math.random()-0.5);
+                const pushDirY = distToCenter > 0 ? m.ndc.y / distToCenter : (Math.random()-0.5);
+                const overlap = minPlanetDist - distToCenter;
+                fx += pushDirX * overlap * 0.8;
+                fy += pushDirY * overlap * 0.8;
+            }
+
+            // B. Screen Bounds Constraint
+            const bound = screenNDCBound - m.ndcRadius * 0.8;
+            if (m.ndc.x > bound) fx -= (m.ndc.x - bound) * 0.8;
+            if (m.ndc.x < -bound) fx += (-bound - m.ndc.x) * 0.8;
+            if (m.ndc.y > bound) fy -= (m.ndc.y - bound) * 0.8;
+            if (m.ndc.y < -bound) fy += (-bound - m.ndc.y) * 0.8;
+
+            // C. Moon-Moon Repulsion
+            moonData.forEach(other => {
+                if (m === other) return;
+                const dx = m.ndc.x - other.ndc.x;
+                const dy = m.ndc.y - other.ndc.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                const minDist = (m.ndcRadius + other.ndcRadius) * 0.9; 
+                if (dist < minDist) {
+                    const pushDirX = dist > 0 ? dx / dist : (Math.random()-0.5);
+                    const pushDirY = dist > 0 ? dy / dist : (Math.random()-0.5);
+                    const overlap = minDist - dist;
+                    fx += pushDirX * overlap * 0.4; // Softer push between moons
+                    fy += pushDirY * overlap * 0.4;
+                }
+            });
+
+            m.force = { x: fx, y: fy };
+        });
+
+        // Apply forces and Unproject
+        moonData.forEach(m => {
+            m.ndc.x += m.force.x;
+            m.ndc.y += m.force.y;
+            
+            // Hard clamp to viewport
+            m.ndc.x = Math.max(-0.95, Math.min(0.95, m.ndc.x));
+            m.ndc.y = Math.max(-0.95, Math.min(0.95, m.ndc.y));
+
+            // Unproject
+            const v = new THREE.Vector3(m.ndc.x, m.ndc.y, m.ndc.z);
+            v.unproject(__tmpCam);
+            m.offset.copy(v).sub(planetWorld);
+            
+            // Ensure we don't clip into the planet surface in 3D
+            const currentDist = m.offset.length();
+            const minR = host.spec.r * 1.6;
+            if (currentDist < minR) {
+                m.offset.setLength(minR);
+            }
+        });
+    }
+
+    // 3. Apply final offsets
+    moonData.forEach(m => {
+        arr[m.id].userData.offset = m.offset;
+        arr[m.id].userData.fitScale = 1.0;
+    });
 }
 // Back-compat convenience wrappers referenced in handlers
 function randomizeProjectMoonOffsets(frontDir) {
@@ -1677,7 +2066,10 @@ function ensurePublicationsMoons(frontDir, show = true) {
             { text: "PDF", href: "static/pdf/GazeQ.pdf" },
             { text: "Code", href: "https://github.com/vialab/gazeq-gpt" },
         ],
-        [{ text: "Published Soon", href: "" }],
+        [
+            { text: "PDF", href: "static/pdf/SwipeSense.pdf" },
+            { text: "Paper", href: "https://dl.acm.org/doi/10.1145/3743734" },
+        ],
     ];
 
     ensureMoons(publicationsMoons, 3, images, labels, descriptions, [], frontDir, show, /*thetaPhase*/ 0, linkGroups);
@@ -1710,10 +2102,16 @@ function computeFinalCameraPosForPlanet(i) {
     const p = planets[i];
     if (!p) return null;
     const r = p.spec && p.spec.r ? p.spec.r : 13;
-    const oy = Math.max(4, Math.min(24, r * 1.5));
-    const oz = Math.max(18, Math.min(110, r * 5.0));
+    
+    const vFOV = (camera.fov * Math.PI) / 180;
+    let tanHalf = Math.tan(vFOV / 2);
+    if (camera.aspect < 1) tanHalf *= camera.aspect;
+    const dist = (2 * r) / tanHalf;
+    const dir = new THREE.Vector3(0, 1.5, 5.0).normalize();
+    const offset = dir.multiplyScalar(dist);
+
     const tgt = p.mesh.getWorldPosition(new THREE.Vector3());
-    return tgt.clone().add(new THREE.Vector3(0, oy, oz));
+    return tgt.clone().add(offset);
 }
 
 // Precompute and lock each moon's world size so that at the anticipated final camera
@@ -1776,9 +2174,9 @@ navButtons.about?.addEventListener("click", () => {
     setActive("about");
     hideMoons(projectMoons);
     hideMoons(publicationsMoons);
-    setCenter(
+    updateIntroSprite(
         "About Me",
-        `<div style="text-align: justify;"> <div style="margin-bottom: 12px; text-align: center; width: 100%;"> <a href='static/pdf/Resume.pdf' target='_blank'>CV</a> </div> Hi! My name is Benedict, but you can call me Ben for short. I am a Master computer science student at Ontario Tech University. My research area is human-computer interaction, focusing on novel interactions with hardware like pen-based devices, eye-tracking, and brain computer interfaces. Recently, my research has been creating interactions with Large Language Models.<br><br>
+        `<div style="text-align: justify;"> <div style="margin-bottom: 12px; text-align: center; width: 100%;"> <a href='static/pdf/Resume.pdf' target='_blank'>CV</a> </div> <br> Hi! My name is Benedict, but you can call me Ben for short. I am a Master computer science student at Ontario Tech University. My research area is human-computer interaction, focusing on novel interactions with hardware like pen-based devices, eye-tracking, and brain computer interfaces. Recently, my research has been creating interactions with Large Language Models.<br><br>
     When I was young, around third grade, I was passionate about being an inventor, in the sense that I wanted to create something never made before and use it to help people who couldn't do a specific task. But that morphed when I was introduced to computer programming. I was amused by how you can put your “heart and soul” into a program and do exactly what you envisioned, meaning your legacy can be imprinted into your programs for generations. My desired legacy is to give to people worldwide, like aiding the blind or advancing neural interfaces. These “dreams” may seem distant, but someone must take the first step, even if no one is willing.
     </div>`
     );
@@ -1788,7 +2186,7 @@ navButtons.projects?.addEventListener("click", () => {
     if (activeSection === "projects") return;
     setActive("projects");
     hideMoons(publicationsMoons);
-    setCenter("Projects", "Click for more info. More repos <a href='https://github.com/Benedict-Leung?tab=repositories' target='_blank'>here</a>.");
+    updateIntroSprite("Projects", "Click for more info. More repos <a href='https://github.com/Benedict-Leung?tab=repositories' target='_blank'>here</a>.");
     // Start moons immediately using a deterministic front (+Z), independent of camera
     {
         const frontDir = new THREE.Vector3(0, 0, 1);
@@ -1811,7 +2209,7 @@ navButtons.publications?.addEventListener("click", () => {
     if (activeSection === "publications") return;
     setActive("publications");
     hideMoons(projectMoons);
-    setCenter("Publications", "2 in progress - <a href='https://scholar.google.com/citations?user=ofhVl3wAAAAJ&hl=en&oi=ao' target='_blank'>Google Scholar</a>");
+    updateIntroSprite("Publications", "2 in progress - <a href='https://scholar.google.com/citations?user=ofhVl3wAAAAJ&hl=en&oi=ao' target='_blank'>Google Scholar</a>");
     // Start moons immediately using a deterministic front (+Z), independent of camera
     {
         const frontDir = new THREE.Vector3(0, 0, 1);
@@ -1835,7 +2233,7 @@ navButtons.contact?.addEventListener("click", () => {
     setActive("contact");
     hideMoons(projectMoons);
     hideMoons(publicationsMoons);
-    setCenter("Contact", "<div><a href='mailto:benedict.leung1@ontariotechu.net' target='_blank'>Email</a> - benedict.leung1@ontariotechu.net</div><div><a href='https://www.linkedin.com/in/ben--leung' target='_blank'>LinkedIn</a></div>");
+    updateIntroSprite("Contact", "<div><a href='mailto:benedict.leung1@ontariotechu.net' target='_blank'>Email</a> - benedict.leung1@ontariotechu.net</div><div><a href='https://www.linkedin.com/in/ben--leung' target='_blank'>LinkedIn</a></div>");
     focusPlanet(2);
 });
 navButtons.planets?.addEventListener("click", () => {
@@ -1843,7 +2241,7 @@ navButtons.planets?.addEventListener("click", () => {
     setActive("planets");
     hideMoons(projectMoons);
     hideMoons(publicationsMoons);
-    setCenter("Benedict Leung", "Computer Science, MSc");
+    updateIntroSprite("Benedict Leung", "Computer Science, MSc");
     focusPlanet("overview");
 });
 
@@ -1852,6 +2250,9 @@ navButtons.planets?.addEventListener("click", () => {
 try {
     preloadMoons();
 } catch (e) {}
+
+// Initialize intro text
+updateIntroSprite("Benedict Leung's Galaxy", "Computer Science, MSc");
 
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2(2, 2);
@@ -1866,22 +2267,70 @@ renderer.domElement.addEventListener("pointermove", ev => {
     pointer.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
     pointerDirty = true;
 });
-renderer.domElement.addEventListener("pointerleave", () => {
+renderer.domElement.addEventListener("pointerleave", (ev) => {
+    if (ev.pointerType === "touch") return;
     pointer.set(2, 2);
     pointerDirty = true;
 });
+
 // Open the hovered moon's link on click, like an anchor tag
 renderer.domElement.addEventListener("click", ev => {
     const rect = renderer.domElement.getBoundingClientRect();
     const mx = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
     const my = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
     const candidates = [...projectMoons.filter(m => m?.material?.opacity > 0), ...publicationsMoons.filter(m => m?.material?.opacity > 0)];
+    if (introSprite) candidates.push(introSprite);
+    
     if (!candidates.length) return;
     raycaster.setFromCamera({ x: mx, y: my }, camera);
     const hits = raycaster.intersectObjects(candidates, false);
     if (!hits.length) return;
     let obj = hits[0].object;
     if (obj && obj.userData?.baseSprite) obj = obj.userData.baseSprite;
+
+    // Mobile/Touch support: if overlay is hidden/fading in, treat click as "reveal" only
+    if (obj && obj.userData?.overlay?.material) {
+        if (obj.userData.overlay.material.opacity < 0.5) {
+            if (hoveredMoon !== obj) {
+                if (hoveredMoon) {
+                    if (hoveredMoon.userData) hoveredMoon.userData.isHovered = false;
+                    if (hoveredMoon.userData?.overlay?.material) gsap.to(hoveredMoon.userData.overlay.material, { opacity: 0, duration: 0.2, overwrite: true });
+                }
+                hoveredMoon = obj;
+                if (hoveredMoon.userData) hoveredMoon.userData.isHovered = true;
+                gsap.to(hoveredMoon.userData.overlay.material, { opacity: 1, duration: 0.2, overwrite: true });
+                
+                // Update pointer to ensure render loop maintains hover
+                pointer.x = mx;
+                pointer.y = my;
+                pointerDirty = true;
+                __lastRaycastAt = performance.now();
+            }
+            return;
+        }
+    }
+
+    // Check intro sprite hotspots
+    if (obj === introSprite && obj.userData.linkHotspots) {
+        const hotspots = obj.userData.linkHotspots;
+        const canvasW = obj.userData.canvasWidth;
+        const canvasH = obj.userData.canvasHeight;
+        
+        if (hotspots.length && canvasW && canvasH) {
+            const uv = hits[0].uv;
+            if (uv) {
+                const cx = uv.x * canvasW;
+                const cy = (1 - uv.y) * canvasH;
+                
+                for (const h of hotspots) {
+                    if (cx >= h.x && cx <= h.x + h.w && cy >= h.y && cy <= h.y + h.h) {
+                        if (h.href) window.open(h.href, "_blank");
+                        return;
+                    }
+                }
+            }
+        }
+    }
 
     // First, if overlay link hotspots exist, check if the click hits one of them
     const hotspots = obj?.userData?.linkHotspots;
@@ -2133,16 +2582,44 @@ function render(now) {
             if (now - __lastRaycastAt >= 12) {
                 // ~30Hz
                 const hoverCandidates = [...projectMoons.filter(m => m.material.opacity > 0), ...publicationsMoons.filter(m => m.material.opacity > 0)];
+                if (introSprite) hoverCandidates.push(introSprite);
+
                 if (hoverCandidates.length) {
                     raycaster.setFromCamera(pointer, camera);
                     const intersects = raycaster.intersectObjects(hoverCandidates, false);
-                    let obj = intersects.length ? intersects[0].object : null;
-                    if (obj && obj.userData?.baseSprite) obj = obj.userData.baseSprite;
+                    
+                    let obj = null;
+                    for (const hit of intersects) {
+                        let candidate = hit.object;
+                        if (candidate.userData?.baseSprite) candidate = candidate.userData.baseSprite;
+                        
+                        if (candidate === introSprite) {
+                            // Only pick introSprite if hovering a link
+                            const hotspots = candidate.userData.linkHotspots;
+                            if (hotspots && hotspots.length && hit.uv) {
+                                const w = candidate.userData.canvasWidth;
+                                const h = candidate.userData.canvasHeight;
+                                const cx = hit.uv.x * w;
+                                const cy = (1 - hit.uv.y) * h;
+                                const isLink = hotspots.some(s => cx >= s.x && cx <= s.x + s.w && cy >= s.y && cy <= s.y + s.h);
+                                if (isLink) {
+                                    obj = candidate;
+                                    break;
+                                }
+                            }
+                        } else {
+                            obj = candidate;
+                            break;
+                        }
+                    }
+
                     // Determine pill hover for overlays with link buttons
                     let pillHoverIndex = -1;
                     if (obj) {
                         const hotspots = obj?.userData?.linkHotspots;
-                        const canvasSize = obj?.userData?.overlayCanvasSize;
+                        // Support both overlayCanvasSize (moons) and canvasWidth (intro)
+                        const canvasSize = obj?.userData?.overlayCanvasSize || obj?.userData?.canvasWidth;
+                        
                         if (Array.isArray(hotspots) && hotspots.length && typeof canvasSize === "number") {
                             const rect = renderer.domElement.getBoundingClientRect();
                             const clientX = (pointer.x + 1) * 0.5 * rect.width + rect.left;
@@ -2173,7 +2650,12 @@ function render(now) {
                                 const u = (px - left) / Math.max(1, width);
                                 const v = (py - top) / Math.max(1, height);
                                 const cx = u * canvasSize;
-                                const cy = v * canvasSize;
+                                // For intro sprite, height might differ from width (non-square)
+                                // But existing logic assumes square canvasSize for both dimensions?
+                                // Let's check if we need separate height.
+                                const canvasH = obj?.userData?.canvasHeight || canvasSize;
+                                const cy = v * canvasH;
+                                
                                 const pad = Math.max(2, Math.round(canvasSize * 0.012));
                                 for (let i = 0; i < hotspots.length; i++) {
                                     const h = hotspots[i];
@@ -2194,11 +2676,25 @@ function render(now) {
                                 hoveredMoon.userData.overlay.userData.hoverIndex = -1;
                                 hoveredMoon.userData.overlay.userData.draw(-1);
                             }
+                            // Reset render order and depth test
+                            hoveredMoon.renderOrder = 0;
+                            if (hoveredMoon.material) hoveredMoon.material.depthTest = true;
+                            if (hoveredMoon.userData?.overlay) {
+                                hoveredMoon.userData.overlay.renderOrder = 0;
+                                if (hoveredMoon.userData.overlay.material) hoveredMoon.userData.overlay.material.depthTest = true;
+                            }
                         }
                         hoveredMoon = obj;
                         if (hoveredMoon) {
                             if (hoveredMoon.userData) hoveredMoon.userData.isHovered = true;
                             if (hoveredMoon.userData?.overlay?.material) gsap.to(hoveredMoon.userData.overlay.material, { opacity: 1, duration: 0.2, overwrite: true });
+                            // Bring to front
+                            hoveredMoon.renderOrder = 9999;
+                            if (hoveredMoon.material) hoveredMoon.material.depthTest = false;
+                            if (hoveredMoon.userData?.overlay) {
+                                hoveredMoon.userData.overlay.renderOrder = 10000;
+                                if (hoveredMoon.userData.overlay.material) hoveredMoon.userData.overlay.material.depthTest = false;
+                            }
                         }
                     }
                     // Redraw overlay with hover style for pills (if present)
@@ -2228,6 +2724,13 @@ function render(now) {
             if (hoveredMoon.userData?.overlay?.userData?.draw) {
                 hoveredMoon.userData.overlay.userData.hoverIndex = -1;
                 hoveredMoon.userData.overlay.userData.draw(-1);
+            }
+            // Reset render order and depth test
+            hoveredMoon.renderOrder = 0;
+            if (hoveredMoon.material) hoveredMoon.material.depthTest = true;
+            if (hoveredMoon.userData?.overlay) {
+                hoveredMoon.userData.overlay.renderOrder = 0;
+                if (hoveredMoon.userData.overlay.material) hoveredMoon.userData.overlay.material.depthTest = true;
             }
             hoveredMoon = null;
             try {
@@ -2272,6 +2775,42 @@ function render(now) {
     };
     applyScreenSpaceScale(projectMoons, 1);
     applyScreenSpaceScale(publicationsMoons, 3);
+
+    // Update intro sprite position and scale
+    if (introSprite) {
+        const dist = camera.position.distanceTo(controls.target);
+        // Place sprite between camera and planet surface
+        // Moons are at ~2.1 * r. We want sprite at ~1.8 * r to ensure clearance.
+        // So distance from camera to sprite = dist - 1.8 * r.
+        // Since sprite is child of camera, z = -(dist - 1.8 * r).
+        let z = -(dist - 1.8 * currentFocusR);
+        // Ensure it doesn't clip near plane
+        if (z > -camera.near - 0.1) z = -camera.near - 0.1;
+        
+        introSprite.position.set(0, 0, z);
+        
+        // Scale to keep constant screen size
+        // Match CSS: max-width: clamp(400px, 90%, 800px)
+        const viewW = renderer.domElement.clientWidth;
+        const targetPx = Math.max(400, Math.min(800, viewW * 0.9));
+
+        const wpp = pxToWorld(Math.abs(z));
+        const targetW = targetPx * wpp;
+        
+        // Use actual aspect ratio from userData if available, else default to 0.5 (2:1)
+        let aspect = 0.5;
+        if (introSprite.userData.canvasWidth && introSprite.userData.canvasHeight) {
+            aspect = introSprite.userData.canvasHeight / introSprite.userData.canvasWidth;
+        }
+        
+        const targetH = targetW * aspect;
+        introSprite.scale.set(targetW, targetH, 1);
+        
+        // Fade out if too close? Or just let it be.
+        // Maybe fade out in Overview if it overlaps sun?
+        // In overview, r=30, dist=800. z = -755.
+        // It will be visible.
+    }
 
     if (followTarget && !__isAnimatingCam) {
         const targetPos = followTarget.getWorldPosition(__vTemp3.set(0, 0, 0));
