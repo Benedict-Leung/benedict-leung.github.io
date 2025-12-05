@@ -142,7 +142,7 @@ function makeCanvasTexture(w, h, draw, colorSpace = THREE.SRGBColorSpace) {
     return tex;
 }
 
-function updateIntroSprite(title, text) {
+function updateIntroSprite(title, text, decorationProgress = 1) {
     if (!introSprite) return;
     
     let tex = introSprite.material.map;
@@ -284,8 +284,20 @@ function updateIntroSprite(title, text) {
         ctx.strokeStyle = "rgba(255, 255, 255, 0.6)"; // Slightly more transparent for background feel
         ctx.lineWidth = 3;
 
+        const strokeWithProgress = (len) => {
+            if (decorationProgress < 1) {
+                ctx.setLineDash([len * decorationProgress, len]);
+                ctx.lineDashOffset = 0;
+            } else {
+                ctx.setLineDash([]);
+            }
+            ctx.stroke();
+            ctx.setLineDash([]);
+        };
+
         if (title.includes("Projects")) { // Projects
             const edgeSize = 180;
+            const chevronLen = Math.sqrt(Math.pow(edgeSize, 2) + Math.pow(edgeSize * 0.6, 2)) * 2;
             
             if (side === 'right') {
                 // Right Edge Chevron
@@ -293,7 +305,7 @@ function updateIntroSprite(title, text) {
                 ctx.moveTo(w, textCenterY - edgeSize);
                 ctx.lineTo(w - edgeSize * 0.6, textCenterY);
                 ctx.lineTo(w, textCenterY + edgeSize);
-                ctx.stroke();
+                strokeWithProgress(chevronLen);
 
                 // Inner Echo
                 ctx.lineWidth = 1;
@@ -301,14 +313,14 @@ function updateIntroSprite(title, text) {
                 ctx.moveTo(w, textCenterY - edgeSize + 40);
                 ctx.lineTo(w - edgeSize * 0.6 + 40, textCenterY);
                 ctx.lineTo(w, textCenterY + edgeSize - 40);
-                ctx.stroke();
+                strokeWithProgress(chevronLen * 0.8);
             } else {
                 // Left Edge Chevron
                 ctx.beginPath();
                 ctx.moveTo(0, textCenterY - edgeSize);
                 ctx.lineTo(edgeSize * 0.6, textCenterY);
                 ctx.lineTo(0, textCenterY + edgeSize);
-                ctx.stroke();
+                strokeWithProgress(chevronLen);
 
                 // Inner Echo
                 ctx.lineWidth = 1;
@@ -316,12 +328,13 @@ function updateIntroSprite(title, text) {
                 ctx.moveTo(0, textCenterY - edgeSize + 40);
                 ctx.lineTo(edgeSize * 0.6 - 40, textCenterY);
                 ctx.lineTo(0, textCenterY + edgeSize - 40);
-                ctx.stroke();
+                strokeWithProgress(chevronLen * 0.8);
             }
 
         } else if (title.includes("Publications")) { // Publications
             const bracketH = 140;
             const bracketW = 80;
+            const bracketLen = (bracketW - 20) * 2 + bracketH * 2;
             
             if (side === 'right') {
                 // Right Bracket
@@ -330,10 +343,10 @@ function updateIntroSprite(title, text) {
                 ctx.lineTo(w - 20, textCenterY - bracketH);
                 ctx.lineTo(w - 20, textCenterY + bracketH);
                 ctx.lineTo(w - bracketW, textCenterY + bracketH);
-                ctx.stroke();
+                strokeWithProgress(bracketLen);
                 
                 // Decorative Rect
-                ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+                ctx.fillStyle = `rgba(255, 255, 255, ${0.8 * decorationProgress})`;
                 ctx.fillRect(w - 10, textCenterY - 20, 10, 40);
             } else {
                 // Left Bracket
@@ -342,42 +355,45 @@ function updateIntroSprite(title, text) {
                 ctx.lineTo(20, textCenterY - bracketH);
                 ctx.lineTo(20, textCenterY + bracketH);
                 ctx.lineTo(bracketW, textCenterY + bracketH);
-                ctx.stroke();
+                strokeWithProgress(bracketLen);
                 
                 // Decorative Rect
-                ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+                ctx.fillStyle = `rgba(255, 255, 255, ${0.8 * decorationProgress})`;
                 ctx.fillRect(0, textCenterY - 20, 10, 40);
             }
 
         } else if (title.includes("About")) { // About
              const r = 160;
+             const arcLen = r * Math.PI;
+             const lineLen = r + 40;
              
              if (side === 'right') {
                  // Right Arc
                  ctx.beginPath();
                  ctx.arc(w, textCenterY, r, Math.PI/2 + 0.2, 3*Math.PI/2 - 0.2);
-                 ctx.stroke();
+                 strokeWithProgress(arcLen);
                  
                  // Crosshair lines
                  ctx.beginPath();
                  ctx.moveTo(w, textCenterY); ctx.lineTo(w - r - 40, textCenterY);
-                 ctx.stroke();
+                 strokeWithProgress(lineLen);
              } else {
                  // Left Arc
                  ctx.beginPath();
                  ctx.arc(0, textCenterY, r, -Math.PI/2 + 0.2, Math.PI/2 - 0.2);
-                 ctx.stroke();
+                 strokeWithProgress(arcLen);
                  
                  // Crosshair lines
                  ctx.beginPath();
                  ctx.moveTo(0, textCenterY); ctx.lineTo(r + 40, textCenterY);
-                 ctx.stroke();
+                 strokeWithProgress(lineLen);
              }
 
         } else { // Default (Contact, Intro)
             const cornerSize = 100;
             const padding = 20;
             const isHome = title.includes("Benedict") || title.includes("Galaxy");
+            const cornerLen = cornerSize * 2 + 60;
             
             if (isHome || side === 'right') {
                 // Top Right
@@ -386,7 +402,7 @@ function updateIntroSprite(title, text) {
                 ctx.lineTo(w - padding - cornerSize, textCenterY - cornerSize);
                 ctx.moveTo(w - padding, textCenterY - cornerSize);
                 ctx.lineTo(w - padding, textCenterY - cornerSize + 60);
-                ctx.stroke();
+                strokeWithProgress(cornerLen);
                 
                 // Bottom Right
                 ctx.beginPath();
@@ -394,7 +410,7 @@ function updateIntroSprite(title, text) {
                 ctx.lineTo(w - padding - cornerSize, textCenterY + cornerSize);
                 ctx.moveTo(w - padding, textCenterY + cornerSize);
                 ctx.lineTo(w - padding, textCenterY + cornerSize - 60);
-                ctx.stroke();
+                strokeWithProgress(cornerLen);
             } 
             
             if (isHome || side !== 'right') {
@@ -404,7 +420,7 @@ function updateIntroSprite(title, text) {
                 ctx.lineTo(padding + cornerSize, textCenterY - cornerSize); 
                 ctx.moveTo(padding, textCenterY - cornerSize);
                 ctx.lineTo(padding, textCenterY - cornerSize + 60); 
-                ctx.stroke();
+                strokeWithProgress(cornerLen);
                 
                 // Bottom Left
                 ctx.beginPath();
@@ -412,7 +428,7 @@ function updateIntroSprite(title, text) {
                 ctx.lineTo(padding + cornerSize, textCenterY + cornerSize);
                 ctx.moveTo(padding, textCenterY + cornerSize);
                 ctx.lineTo(padding, textCenterY + cornerSize - 60);
-                ctx.stroke();
+                strokeWithProgress(cornerLen);
             }
         }
 
@@ -484,18 +500,25 @@ function updateIntroSprite(title, text) {
 let introFadeState = {
     active: false,
     phase: 'none',
+    currentTitle: null,
+    currentText: null,
     nextTitle: null,
     nextText: null,
     nextLayout: null,
     startTime: 0,
-    duration: 300
+    duration: 300,
+    decorationDuration: 1000, // Slower decoration animation
+    waitForSignal: false,
+    signalReceived: false
 };
 
-function transitionIntroSprite(title, text) {
+function transitionIntroSprite(title, text, waitForArrival = false) {
     if (!introSprite) return;
     
     introFadeState.nextTitle = title;
     introFadeState.nextText = text;
+    introFadeState.waitForSignal = waitForArrival;
+    introFadeState.signalReceived = false;
     
     if (introFadeState.active) {
         if (introFadeState.phase === 'in') {
@@ -514,16 +537,35 @@ function transitionIntroSprite(title, text) {
     requestAnimationFrame(animateIntroFade);
 }
 
+function signalIntroArrival() {
+    if (introFadeState.active && introFadeState.waitForSignal) {
+        introFadeState.signalReceived = true;
+        // If we were stuck in 'out' phase waiting, reset start time to now to begin 'in' phase immediately
+        if (introFadeState.phase === 'out' && introSprite.material.opacity <= 0.01) {
+             // We are already fully faded out and waiting.
+             // The loop in animateIntroFade will pick this up on next frame.
+        }
+    }
+}
+
 function animateIntroFade(now) {
     if (!introFadeState.active) return;
     
     const elapsed = now - introFadeState.startTime;
-    const progress = Math.min(1, elapsed / introFadeState.duration);
     
     if (introFadeState.phase === 'out') {
+        const progress = Math.min(1, elapsed / introFadeState.duration);
         introSprite.material.opacity = 1 - progress;
         if (progress >= 1) {
-            updateIntroSprite(introFadeState.nextTitle, introFadeState.nextText);
+            // Check if we need to wait for signal
+            if (introFadeState.waitForSignal && !introFadeState.signalReceived) {
+                introSprite.material.opacity = 0;
+                requestAnimationFrame(animateIntroFade);
+                return;
+            }
+
+            introFadeState.currentTitle = introFadeState.nextTitle;
+            introFadeState.currentText = introFadeState.nextText;
             
             if (introFadeState.nextLayout) {
                 currentTextLayout = introFadeState.nextLayout;
@@ -533,10 +575,16 @@ function animateIntroFade(now) {
             introFadeState.phase = 'in';
             introFadeState.startTime = performance.now();
             introSprite.material.opacity = 0;
+            updateIntroSprite(introFadeState.currentTitle, introFadeState.currentText, 0);
         }
     } else if (introFadeState.phase === 'in') {
-        introSprite.material.opacity = progress;
-        if (progress >= 1) {
+        const fadeProgress = Math.min(1, elapsed / introFadeState.duration);
+        const decorationProgress = Math.min(1, elapsed / introFadeState.decorationDuration);
+        
+        introSprite.material.opacity = fadeProgress;
+        updateIntroSprite(introFadeState.currentTitle, introFadeState.currentText, decorationProgress);
+        
+        if (fadeProgress >= 1 && decorationProgress >= 1) {
             introFadeState.active = false;
             introFadeState.phase = 'none';
             introSprite.material.opacity = 1;
@@ -1521,19 +1569,21 @@ function attachOverlayToSprite(sprite, label, description, links) {
                     
                     pCtx.fillStyle = isHover ? "rgba(255,255,255,0.30)" : "rgba(255,255,255,0.12)";
                     pCtx.strokeStyle = isHover ? "#ffffff" : "rgba(255,255,255,0.28)";
-                    pCtx.lineWidth = Math.max(1, Math.round(S * 0.006));
+                    const lw = Math.max(1, Math.round(S * 0.006));
+                    pCtx.lineWidth = lw;
                     
-                    // rounded rect
+                    // Inset to avoid clipping stroke
+                    const offset = lw / 2;
+                    const radius = (h / 2) - offset;
+                    const capX = h / 2;
+
+                    // rounded rect (pill) using arcs
                     pCtx.beginPath();
-                    pCtx.moveTo(r, 0);
-                    pCtx.lineTo(w - r, 0);
-                    pCtx.quadraticCurveTo(w, 0, w, r);
-                    pCtx.lineTo(w, h - r);
-                    pCtx.quadraticCurveTo(w, h, w - r, h);
-                    pCtx.lineTo(r, h);
-                    pCtx.quadraticCurveTo(0, h, 0, h - r);
-                    pCtx.lineTo(0, r);
-                    pCtx.quadraticCurveTo(0, 0, r, 0);
+                    pCtx.moveTo(capX, offset);
+                    pCtx.lineTo(w - capX, offset);
+                    pCtx.arc(w - capX, h / 2, radius, -Math.PI / 2, Math.PI / 2);
+                    pCtx.lineTo(capX, h - offset);
+                    pCtx.arc(capX, h / 2, radius, Math.PI / 2, 3 * Math.PI / 2);
                     pCtx.closePath();
                     pCtx.fill();
                     if (isHover) pCtx.stroke();
@@ -2208,7 +2258,9 @@ function focusPlanet(i, onFocused) {
             currentTextLayout = "center";
         }
         __stopFollowingMode();
-        animateCameraTo(new THREE.Vector3(0, 800, 0), new THREE.Vector3(0, 0, 0), 1.4);
+        animateCameraTo(new THREE.Vector3(0, 800, 0), new THREE.Vector3(0, 0, 0), 1.4, () => {
+            if (typeof onFocused === "function") onFocused();
+        });
         return;
     }
     const p = planets[i];
@@ -2373,7 +2425,7 @@ function randomizeMoonsOffsets(arr, planetIndex, frontDir, thetaPhase = 0) {
     // - Separated from each other
     const iterations = 150;
     const planetNDCRadius = 0; // Planet radius ~0.5 + margin
-    const screenNDCBound = 0.75;  // Keep inside 0.9
+    const screenNDCBound = 0.85;  // Keep inside 0.9
     
     // Calculate planet center in NDC
     const planetNDC = planetWorld.clone().project(__tmpCam);
@@ -2415,14 +2467,30 @@ function randomizeMoonsOffsets(arr, planetIndex, frontDir, thetaPhase = 0) {
                 fy += pushDirY_corr * overlap * 0.8;
             }
 
-            // B. Screen Bounds Constraint
+            // B. Screen Bounds Constraint (Hard + Soft)
             const boundY = screenNDCBound - m.ndcRadius * 0.8;
             const boundX = screenNDCBound - (m.ndcRadius / aspect) * 0.8;
+            const margin = 0.2;
+            const softStrength = 0.05;
+            const hardStrength = 0.5;
 
-            if (m.ndc.x > boundX) fx -= (m.ndc.x - boundX) * 0.8;
-            if (m.ndc.x < -boundX) fx += (-boundX - m.ndc.x) * 0.8;
-            if (m.ndc.y > boundY) fy -= (m.ndc.y - boundY) * 0.8;
-            if (m.ndc.y < -boundY) fy += (-boundY - m.ndc.y) * 0.8;
+            // X Axis
+            if (m.ndc.x > boundX - margin) {
+                fx -= softStrength * ((m.ndc.x - (boundX - margin)) / margin);
+                if (m.ndc.x > boundX) fx -= (m.ndc.x - boundX) * hardStrength;
+            } else if (m.ndc.x < -boundX + margin) {
+                fx += softStrength * (((-boundX + margin) - m.ndc.x) / margin);
+                if (m.ndc.x < -boundX) fx += (-boundX - m.ndc.x) * hardStrength;
+            }
+
+            // Y Axis
+            if (m.ndc.y > boundY - margin) {
+                fy -= softStrength * ((m.ndc.y - (boundY - margin)) / margin);
+                if (m.ndc.y > boundY) fy -= (m.ndc.y - boundY) * hardStrength;
+            } else if (m.ndc.y < -boundY + margin) {
+                fy += softStrength * (((-boundY + margin) - m.ndc.y) / margin);
+                if (m.ndc.y < -boundY) fy += (-boundY - m.ndc.y) * hardStrength;
+            }
 
             // C. Moon-Moon Repulsion (Boids Separation)
             moonData.forEach(other => {
@@ -2806,15 +2874,16 @@ navButtons.about?.addEventListener("click", () => {
         "About Me",
         `<div style="text-align: justify;"> <div style="margin-bottom: 12px; text-align: center; width: 100%;"> <a href='static/pdf/Resume.pdf' target='_blank'>CV</a> </div> <br> Hi! My name is Benedict, but you can call me Ben for short. I am a Master computer science student at Ontario Tech University. My research area is human-computer interaction, focusing on novel interactions with hardware like pen-based devices, eye-tracking, and brain computer interfaces. Recently, my research has been creating interactions with Large Language Models.<br><br>
     When I was young, around third grade, I was passionate about being an inventor, in the sense that I wanted to create something never made before and use it to help people who couldn't do a specific task. But that morphed when I was introduced to computer programming. I was amused by how you can put your “heart and soul” into a program and do exactly what you envisioned, meaning your legacy can be imprinted into your programs for generations. My desired legacy is to give to people worldwide, like aiding the blind or advancing neural interfaces. These “dreams” may seem distant, but someone must take the first step, even if no one is willing.
-    </div>`
+    </div>`,
+        true // Wait for arrival
     );
-    focusPlanet(0);
+    focusPlanet(0, () => signalIntroArrival());
 });
 navButtons.projects?.addEventListener("click", () => {
     if (activeSection === "projects") return;
     setActive("projects");
     hideMoons(publicationsMoons);
-    transitionIntroSprite("Projects", "Click for more info. More repos <a href='https://github.com/Benedict-Leung?tab=repositories' target='_blank'>here</a>.");
+    transitionIntroSprite("Projects", "Click for more info. More repos <a href='https://github.com/Benedict-Leung?tab=repositories' target='_blank'>here</a>.", true);
     // Start moons immediately using a deterministic front (+Z), independent of camera
     {
         const frontDir = new THREE.Vector3(0, 0, 1);
@@ -2831,13 +2900,13 @@ navButtons.projects?.addEventListener("click", () => {
         }
     }
     // Move camera in parallel without delaying moons
-    focusPlanet(1);
+    focusPlanet(1, () => signalIntroArrival());
 });
 navButtons.publications?.addEventListener("click", () => {
     if (activeSection === "publications") return;
     setActive("publications");
     hideMoons(projectMoons);
-    transitionIntroSprite("Publications", "2 in progress - <a href='https://scholar.google.com/citations?user=ofhVl3wAAAAJ&hl=en&oi=ao' target='_blank'>Google Scholar</a>");
+    transitionIntroSprite("Publications", "2 in progress - <a href='https://scholar.google.com/citations?user=ofhVl3wAAAAJ&hl=en&oi=ao' target='_blank'>Google Scholar</a>", true);
     // Start moons immediately using a deterministic front (+Z), independent of camera
     {
         const frontDir = new THREE.Vector3(0, 0, 1);
@@ -2854,23 +2923,23 @@ navButtons.publications?.addEventListener("click", () => {
         }
     }
     // Move camera in parallel without delaying moons
-    focusPlanet(3);
+    focusPlanet(3, () => signalIntroArrival());
 });
 navButtons.contact?.addEventListener("click", () => {
     if (activeSection === "contact") return;
     setActive("contact");
     hideMoons(projectMoons);
     hideMoons(publicationsMoons);
-    transitionIntroSprite("Contact", "<div><a href='mailto:benedict.leung1@ontariotechu.net' target='_blank'>Email</a> - benedict.leung1@ontariotechu.net</div><div><a href='https://www.linkedin.com/in/ben--leung' target='_blank'>LinkedIn</a></div>");
-    focusPlanet(2);
+    transitionIntroSprite("Contact", "<div><a href='mailto:benedict.leung1@ontariotechu.net' target='_blank'>Email</a> - benedict.leung1@ontariotechu.net</div><div><a href='https://www.linkedin.com/in/ben--leung' target='_blank'>LinkedIn</a></div>", true);
+    focusPlanet(2, () => signalIntroArrival());
 });
 navButtons.planets?.addEventListener("click", () => {
     if (activeSection === "planets") return;
     setActive("planets");
     hideMoons(projectMoons);
     hideMoons(publicationsMoons);
-    transitionIntroSprite("Benedict Leung", "Computer Science, MSc");
-    focusPlanet("overview");
+    transitionIntroSprite("Benedict Leung", "Computer Science, MSc", true);
+    focusPlanet("overview", () => signalIntroArrival());
 });
 
 // hover handling for project/publications moons
@@ -2906,15 +2975,37 @@ renderer.domElement.addEventListener("click", ev => {
     const rect = renderer.domElement.getBoundingClientRect();
     const mx = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
     const my = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
-    const candidates = [...projectMoons.filter(m => m?.material?.opacity > 0), ...publicationsMoons.filter(m => m?.material?.opacity > 0)];
+    
+    // Build candidates list including pills
+    const candidates = [];
+    const addCandidates = (m) => {
+        if (m?.material?.opacity > 0) {
+            candidates.push(m);
+            if (Array.isArray(m.userData?.pillSprites)) {
+                candidates.push(...m.userData.pillSprites);
+            }
+        }
+    };
+    projectMoons.forEach(addCandidates);
+    publicationsMoons.forEach(addCandidates);
     if (introSprite) candidates.push(introSprite);
     
     if (!candidates.length) return;
     raycaster.setFromCamera({ x: mx, y: my }, camera);
     const hits = raycaster.intersectObjects(candidates, false);
     if (!hits.length) return;
+    
     let obj = hits[0].object;
-    if (obj && obj.userData?.baseSprite) obj = obj.userData.baseSprite;
+
+    // 1. Pill Hit
+    if (obj.userData?.isPill) {
+        const href = obj.userData.href;
+        if (href) window.open(href, "_blank", "noopener,noreferrer");
+        return;
+    }
+
+    // 2. Moon/Intro Hit
+    if (obj.userData?.baseSprite) obj = obj.userData.baseSprite;
 
     // Mobile/Touch support: if overlay is hidden/fading in, treat click as "reveal" only
     if (obj && obj.userData?.overlay?.material) {
@@ -2923,6 +3014,12 @@ renderer.domElement.addEventListener("click", ev => {
                 if (hoveredMoon) {
                     if (hoveredMoon.userData) hoveredMoon.userData.isHovered = false;
                     if (hoveredMoon.userData?.overlay?.material) gsap.to(hoveredMoon.userData.overlay.material, { opacity: 0, duration: 0.2, overwrite: true });
+                    // Fade out pills
+                    if (Array.isArray(hoveredMoon.userData?.pillSprites)) {
+                        hoveredMoon.userData.pillSprites.forEach(p => {
+                            if (p.material) gsap.to(p.material, { opacity: 0, duration: 0.2, overwrite: true });
+                        });
+                    }
                 }
                 hoveredMoon = obj;
                 if (hoveredMoon.userData) hoveredMoon.userData.isHovered = true;
@@ -2938,7 +3035,7 @@ renderer.domElement.addEventListener("click", ev => {
         }
     }
 
-    // Check intro sprite hotspots
+    // Check intro sprite hotspots (Legacy UV check for intro text links)
     if (obj === introSprite && obj.userData.linkHotspots) {
         const hotspots = obj.userData.linkHotspots;
         const canvasW = obj.userData.canvasWidth;
@@ -2960,65 +3057,10 @@ renderer.domElement.addEventListener("click", ev => {
         }
     }
 
-    // First, if overlay link hotspots exist, check if the click hits one of them
-    const hotspots = obj?.userData?.linkHotspots;
-    const canvasSize = obj?.userData?.overlayCanvasSize;
-    if (Array.isArray(hotspots) && hotspots.length && typeof canvasSize === "number" && canvasSize > 0) {
-        const openHotspotLinkIfAny = (sprite, clientX, clientY) => {
-            // Compute sprite's screen-space rect in pixels
-            const centerWorld = sprite.getWorldPosition(new THREE.Vector3());
-            const toScreen = v3 => {
-                const v = v3.clone().project(camera);
-                return {
-                    x: (v.x * 0.5 + 0.5) * rect.width,
-                    y: (-v.y * 0.5 + 0.5) * rect.height,
-                };
-            };
-            // Camera basis (world space)
-            const camX = new THREE.Vector3();
-            const camY = new THREE.Vector3();
-            const camZ = new THREE.Vector3();
-            camera.matrixWorld.extractBasis(camX, camY, camZ);
-            const halfW = (sprite.scale.x || 1) * 0.5;
-            const halfH = (sprite.scale.y || 1) * 0.5;
-            const pC = toScreen(centerWorld);
-            const pR = toScreen(centerWorld.clone().add(camX.clone().multiplyScalar(halfW)));
-            const pU = toScreen(centerWorld.clone().add(camY.clone().multiplyScalar(halfH)));
-            const hwPx = Math.abs(pR.x - pC.x);
-            const hhPx = Math.abs(pU.y - pC.y);
-            const left = pC.x - hwPx;
-            const top = pC.y - hhPx;
-            const width = hwPx * 2;
-            const height = hhPx * 2;
-            const px = clientX - rect.left;
-            const py = clientY - rect.top;
-            if (px < left || px > left + width || py < top || py > top + height) return null;
-            // Map to overlay canvas coordinates
-            const u = (px - left) / Math.max(1, width);
-            const v = (py - top) / Math.max(1, height);
-            const cx = u * canvasSize;
-            const cy = v * canvasSize;
-            const pad = Math.max(2, Math.round(canvasSize * 0.012));
-            for (let i = 0; i < hotspots.length; i++) {
-                const h = hotspots[i];
-                if (cx >= h.x - pad && cx <= h.x + h.w + pad && cy >= h.y - pad && cy <= h.y + h.h + pad) {
-                    return h.href || null;
-                }
-            }
-            return null;
-        };
-        const link = openHotspotLinkIfAny(obj, ev.clientX, ev.clientY);
-        if (link && typeof link === "string") {
-            try {
-                window.open(link, "_blank", "noopener,noreferrer");
-            } catch (e) {}
-            return;
-        }
-    }
-    // If pills exist, disable default moon click (only buttons are clickable)
-    const hasPills = Array.isArray(obj?.userData?.linkHotspots) && obj.userData.linkHotspots.length;
+    // Fallback: open the sprite's default link if no pills exist
+    // If pills exist, we only want clicks on pills to open links, not the moon body
+    const hasPills = Array.isArray(obj?.userData?.pillSprites) && obj.userData.pillSprites.length;
     if (!hasPills) {
-        // Fallback: open the sprite's default link
         const href = obj?.userData?.href;
         if (href && typeof href === "string") {
             try {
