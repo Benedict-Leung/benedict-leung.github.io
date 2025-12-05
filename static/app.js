@@ -54,7 +54,6 @@ function dirFromAngle(angle, right, up) {
 }
 // Shortest signed angle difference b - a in [-PI, PI]
 function angleDiffShortest(a, b) {
-    const TAU = Math.PI * 2;
     return ((((b - a + Math.PI) % TAU) + TAU) % TAU) - Math.PI;
 }
 // Cubic Hermite between 0 and 1 with endpoint slopes m0 at 0 and m1 at 1
@@ -163,7 +162,7 @@ function updateIntroSprite(title, text) {
     const ctx = c.getContext("2d");
     
     // Measure text first to determine height
-    ctx.font = "20px system-ui, Segoe UI, Roboto, Arial";
+    ctx.font = "20px 'Raleway', sans-serif";
     
     let lines = [];
     const w = 1024; // Fixed width base
@@ -265,11 +264,161 @@ function updateIntroSprite(title, text) {
     ctx.shadowBlur = 10;
     ctx.shadowOffsetY = 6;
     
-    ctx.font = "bold 50px system-ui, Segoe UI, Roboto, Arial";
+    ctx.font = "bold 50px 'Oswald', sans-serif";
     let currentY = startY;
     
     if (title) {
-        ctx.fillText(title, w / 2, currentY + 25);
+        const titleStr = title.toUpperCase();
+        const textCenterY = currentY + 25;
+
+        // Determine side based on layout
+        let side = typeof currentTextLayout !== 'undefined' ? currentTextLayout : 'center';
+        if (typeof introFadeState !== 'undefined' && introFadeState.nextLayout) {
+            side = introFadeState.nextLayout;
+        }
+        // Default center to left for single-sided decoration
+        if (side !== 'right') side = 'left';
+
+        // Draw Border Decorations
+        ctx.save();
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.6)"; // Slightly more transparent for background feel
+        ctx.lineWidth = 3;
+
+        if (title.includes("Projects")) { // Projects
+            const edgeSize = 180;
+            
+            if (side === 'right') {
+                // Right Edge Chevron
+                ctx.beginPath();
+                ctx.moveTo(w, textCenterY - edgeSize);
+                ctx.lineTo(w - edgeSize * 0.6, textCenterY);
+                ctx.lineTo(w, textCenterY + edgeSize);
+                ctx.stroke();
+
+                // Inner Echo
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(w, textCenterY - edgeSize + 40);
+                ctx.lineTo(w - edgeSize * 0.6 + 40, textCenterY);
+                ctx.lineTo(w, textCenterY + edgeSize - 40);
+                ctx.stroke();
+            } else {
+                // Left Edge Chevron
+                ctx.beginPath();
+                ctx.moveTo(0, textCenterY - edgeSize);
+                ctx.lineTo(edgeSize * 0.6, textCenterY);
+                ctx.lineTo(0, textCenterY + edgeSize);
+                ctx.stroke();
+
+                // Inner Echo
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(0, textCenterY - edgeSize + 40);
+                ctx.lineTo(edgeSize * 0.6 - 40, textCenterY);
+                ctx.lineTo(0, textCenterY + edgeSize - 40);
+                ctx.stroke();
+            }
+
+        } else if (title.includes("Publications")) { // Publications
+            const bracketH = 140;
+            const bracketW = 80;
+            
+            if (side === 'right') {
+                // Right Bracket
+                ctx.beginPath();
+                ctx.moveTo(w - bracketW, textCenterY - bracketH);
+                ctx.lineTo(w - 20, textCenterY - bracketH);
+                ctx.lineTo(w - 20, textCenterY + bracketH);
+                ctx.lineTo(w - bracketW, textCenterY + bracketH);
+                ctx.stroke();
+                
+                // Decorative Rect
+                ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+                ctx.fillRect(w - 10, textCenterY - 20, 10, 40);
+            } else {
+                // Left Bracket
+                ctx.beginPath();
+                ctx.moveTo(bracketW, textCenterY - bracketH);
+                ctx.lineTo(20, textCenterY - bracketH);
+                ctx.lineTo(20, textCenterY + bracketH);
+                ctx.lineTo(bracketW, textCenterY + bracketH);
+                ctx.stroke();
+                
+                // Decorative Rect
+                ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+                ctx.fillRect(0, textCenterY - 20, 10, 40);
+            }
+
+        } else if (title.includes("About")) { // About
+             const r = 160;
+             
+             if (side === 'right') {
+                 // Right Arc
+                 ctx.beginPath();
+                 ctx.arc(w, textCenterY, r, Math.PI/2 + 0.2, 3*Math.PI/2 - 0.2);
+                 ctx.stroke();
+                 
+                 // Crosshair lines
+                 ctx.beginPath();
+                 ctx.moveTo(w, textCenterY); ctx.lineTo(w - r - 40, textCenterY);
+                 ctx.stroke();
+             } else {
+                 // Left Arc
+                 ctx.beginPath();
+                 ctx.arc(0, textCenterY, r, -Math.PI/2 + 0.2, Math.PI/2 - 0.2);
+                 ctx.stroke();
+                 
+                 // Crosshair lines
+                 ctx.beginPath();
+                 ctx.moveTo(0, textCenterY); ctx.lineTo(r + 40, textCenterY);
+                 ctx.stroke();
+             }
+
+        } else { // Default (Contact, Intro)
+            const cornerSize = 100;
+            const padding = 20;
+            const isHome = title.includes("Benedict") || title.includes("Galaxy");
+            
+            if (isHome || side === 'right') {
+                // Top Right
+                ctx.beginPath();
+                ctx.moveTo(w - padding, textCenterY - cornerSize);
+                ctx.lineTo(w - padding - cornerSize, textCenterY - cornerSize);
+                ctx.moveTo(w - padding, textCenterY - cornerSize);
+                ctx.lineTo(w - padding, textCenterY - cornerSize + 60);
+                ctx.stroke();
+                
+                // Bottom Right
+                ctx.beginPath();
+                ctx.moveTo(w - padding, textCenterY + cornerSize);
+                ctx.lineTo(w - padding - cornerSize, textCenterY + cornerSize);
+                ctx.moveTo(w - padding, textCenterY + cornerSize);
+                ctx.lineTo(w - padding, textCenterY + cornerSize - 60);
+                ctx.stroke();
+            } 
+            
+            if (isHome || side !== 'right') {
+                // Top Left
+                ctx.beginPath();
+                ctx.moveTo(padding, textCenterY - cornerSize);
+                ctx.lineTo(padding + cornerSize, textCenterY - cornerSize); 
+                ctx.moveTo(padding, textCenterY - cornerSize);
+                ctx.lineTo(padding, textCenterY - cornerSize + 60); 
+                ctx.stroke();
+                
+                // Bottom Left
+                ctx.beginPath();
+                ctx.moveTo(padding, textCenterY + cornerSize);
+                ctx.lineTo(padding + cornerSize, textCenterY + cornerSize);
+                ctx.moveTo(padding, textCenterY + cornerSize);
+                ctx.lineTo(padding, textCenterY + cornerSize - 60);
+                ctx.stroke();
+            }
+        }
+
+        ctx.restore();
+
+        ctx.fillText(titleStr, w / 2, currentY + 25);
         currentY += 50;
     }
     
@@ -278,7 +427,7 @@ function updateIntroSprite(title, text) {
     if (lines.length > 0) {
         if (title) currentY += gap;
         
-        ctx.font = "20px system-ui, Segoe UI, Roboto, Arial";
+        ctx.font = "20px 'Raleway', sans-serif";
         let y = currentY + lineHeight / 2;
         
         lines.forEach(line => {
@@ -332,6 +481,72 @@ function updateIntroSprite(title, text) {
     introSprite.userData.canvasHeight = h;
 }
 
+let introFadeState = {
+    active: false,
+    phase: 'none',
+    nextTitle: null,
+    nextText: null,
+    nextLayout: null,
+    startTime: 0,
+    duration: 300
+};
+
+function transitionIntroSprite(title, text) {
+    if (!introSprite) return;
+    
+    introFadeState.nextTitle = title;
+    introFadeState.nextText = text;
+    
+    if (introFadeState.active) {
+        if (introFadeState.phase === 'in') {
+            introFadeState.phase = 'out';
+            const currentOpacity = introSprite.material.opacity;
+            const elapsed = introFadeState.duration * (1 - currentOpacity);
+            introFadeState.startTime = performance.now() - elapsed;
+        }
+        return;
+    }
+    
+    introFadeState.active = true;
+    introFadeState.phase = 'out';
+    introFadeState.startTime = performance.now();
+    
+    requestAnimationFrame(animateIntroFade);
+}
+
+function animateIntroFade(now) {
+    if (!introFadeState.active) return;
+    
+    const elapsed = now - introFadeState.startTime;
+    const progress = Math.min(1, elapsed / introFadeState.duration);
+    
+    if (introFadeState.phase === 'out') {
+        introSprite.material.opacity = 1 - progress;
+        if (progress >= 1) {
+            updateIntroSprite(introFadeState.nextTitle, introFadeState.nextText);
+            
+            if (introFadeState.nextLayout) {
+                currentTextLayout = introFadeState.nextLayout;
+                introFadeState.nextLayout = null;
+            }
+
+            introFadeState.phase = 'in';
+            introFadeState.startTime = performance.now();
+            introSprite.material.opacity = 0;
+        }
+    } else if (introFadeState.phase === 'in') {
+        introSprite.material.opacity = progress;
+        if (progress >= 1) {
+            introFadeState.active = false;
+            introFadeState.phase = 'none';
+            introSprite.material.opacity = 1;
+            return;
+        }
+    }
+    
+    requestAnimationFrame(animateIntroFade);
+}
+
 function parseTextWithLinks(text) {
     const tokens = [];
     const div = document.createElement("div");
@@ -374,9 +589,23 @@ function parseTextWithLinks(text) {
 function normalToHeightTexture(normalTex, strength = 1.0) {
     try {
         const img = normalTex?.image;
-        const W = img?.width || 0,
-            H = img?.height || 0;
+        let W = img?.width || 0;
+        let H = img?.height || 0;
         if (!W || !H) return null;
+
+        // Optimization: Limit resolution for height map generation to avoid main thread freeze
+        const MAX_DIM = 512;
+        if (W > MAX_DIM || H > MAX_DIM) {
+            const aspect = W / H;
+            if (W > H) {
+                W = MAX_DIM;
+                H = Math.round(MAX_DIM / aspect);
+            } else {
+                H = MAX_DIM;
+                W = Math.round(MAX_DIM * aspect);
+            }
+        }
+
         const c = document.createElement("canvas");
         c.width = W;
         c.height = H;
@@ -1145,7 +1374,7 @@ function attachOverlayToSprite(sprite, label, description, links) {
         // 1) Background circle: scale with moon using ratio
         ctx.save();
         ctx.scale(ratio, ratio);
-        ctx.fillStyle = "rgba(14, 15, 17, 0.62)";
+        ctx.fillStyle = "rgba(14, 15, 17, 0.8)";
         ctx.beginPath();
         ctx.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2);
         ctx.fill();
@@ -1167,7 +1396,7 @@ function attachOverlayToSprite(sprite, label, description, links) {
         let fontPx = Math.round(S * 0.12);
         let labelLines = [];
         const wrapWithFont = (text, fontPxLocal) => {
-            ctx.font = `${fontPxLocal}px sans-serif`;
+            ctx.font = `${fontPxLocal}px 'Oswald', sans-serif`;
             const words = String(text || "").split(/\s+/);
             const lines = [];
             let cur = "";
@@ -1199,7 +1428,7 @@ function attachOverlayToSprite(sprite, label, description, links) {
 
         // Description: start below label block (or fallback to baseline position)
         if (description) {
-            ctx.font = `${Math.min(Math.round(fontPx - 2), Math.round(S * 0.07))}px sans-serif`;
+            ctx.font = `${Math.min(Math.round(fontPx - 2), Math.round(S * 0.07))}px 'Raleway', sans-serif`;
             const words = String(description).split(" ");
             let line = "";
             const maxW = Math.round(S * ratio * 0.78); // wrap width in baseline pixels
@@ -1471,7 +1700,7 @@ function sphereSegmentsForRadius(r) {
 // Orbit line material (thin line to show elliptical path)
 const orbitLineMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.12 });
 
-const sunTex = generateSunTexture(1024, 512);
+const sunTex = generateSunTexture(512, 256);
 sunTex.wrapS = THREE.RepeatWrapping;
 sunTex.wrapT = THREE.RepeatWrapping;
 const sunMat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffc35b, emissiveMap: sunTex, emissiveIntensity: 0.5, roughness: 1.0, metalness: 0.0 });
@@ -1727,14 +1956,252 @@ function animateCameraTo(destPos, destTarget, duration = 1.6, onComplete = null,
 
 
 
+// Abstract Shape Patterns System
+const PlanetPatterns = {
+    patterns: [],
+    
+    init(planets) {
+        planets.forEach((p, i) => {
+            const r = p.spec.r || 13;
+            const color = p.spec.color;
+            const pattern = this.createPattern(i, r, color);
+            pattern.userData.progress = 0;
+            pattern.userData.targetProgress = 0;
+            pattern.visible = false;
+            // Attach to planet mesh so it moves with it
+            p.mesh.add(pattern);
+            this.patterns.push(pattern);
+        });
+    },
+
+    createPattern(index, r, color) {
+        const group = new THREE.Group();
+        const mat = new THREE.LineBasicMaterial({ color: color, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending });
+        const matStrong = new THREE.LineBasicMaterial({ color: color, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending });
+        
+        // Helper to create line loop with densification for smooth drawing
+        const createLoop = (pts, material = mat) => {
+            let finalPts = pts;
+            // Densify if points are few (e.g. manual shapes) to allow smooth draw animation
+            if (pts.length < 50) {
+                const newPts = [];
+                const segments = 20; // Subdivisions per segment
+                for (let i = 0; i < pts.length - 1; i++) {
+                    const p1 = pts[i];
+                    const p2 = pts[i+1];
+                    for (let j = 0; j < segments; j++) {
+                        newPts.push(new THREE.Vector3().lerpVectors(p1, p2, j/segments));
+                    }
+                }
+                newPts.push(pts[pts.length - 1]);
+                finalPts = newPts;
+            }
+
+            const geo = new THREE.BufferGeometry().setFromPoints(finalPts);
+            const line = new THREE.Line(geo, material);
+            line.userData.totalPoints = finalPts.length;
+            geo.setDrawRange(0, 0); // Start hidden
+            return line;
+        };
+
+        // Helper for circle/arc
+        const createArc = (radius, startAngle, endAngle, material = mat) => {
+            const pts = [];
+            const steps = 64;
+            for (let i = 0; i <= steps; i++) {
+                const t = startAngle + (endAngle - startAngle) * (i / steps);
+                pts.push(new THREE.Vector3(Math.cos(t) * radius, Math.sin(t) * radius, 0));
+            }
+            return createLoop(pts, material);
+        };
+
+        if (index === 0) { // Mercury - Projects (Abstract Tech)
+            // Rotated Square/Diamond
+            const s1 = [
+                new THREE.Vector3(0, r*2.2, 0),
+                new THREE.Vector3(r*2.2, 0, 0),
+                new THREE.Vector3(0, -r*2.2, 0),
+                new THREE.Vector3(-r*2.2, 0, 0),
+                new THREE.Vector3(0, r*2.2, 0)
+            ];
+            group.add(createLoop(s1, matStrong));
+
+            // Inner Square
+            const s2 = [
+                new THREE.Vector3(-r*1.2, r*1.2, 0),
+                new THREE.Vector3(r*1.2, r*1.2, 0),
+                new THREE.Vector3(r*1.2, -r*1.2, 0),
+                new THREE.Vector3(-r*1.2, -r*1.2, 0),
+                new THREE.Vector3(-r*1.2, r*1.2, 0)
+            ];
+            group.add(createLoop(s2));
+
+            // Corner accents
+            const len = r * 0.5;
+            const corners = [
+                [new THREE.Vector3(-r*2.5, r*2.5 - len, 0), new THREE.Vector3(-r*2.5, r*2.5, 0), new THREE.Vector3(-r*2.5 + len, r*2.5, 0)],
+                [new THREE.Vector3(r*2.5 - len, r*2.5, 0), new THREE.Vector3(r*2.5, r*2.5, 0), new THREE.Vector3(r*2.5, r*2.5 - len, 0)],
+                [new THREE.Vector3(r*2.5, -r*2.5 + len, 0), new THREE.Vector3(r*2.5, -r*2.5, 0), new THREE.Vector3(r*2.5 - len, -r*2.5, 0)],
+                [new THREE.Vector3(-r*2.5 + len, -r*2.5, 0), new THREE.Vector3(-r*2.5, -r*2.5, 0), new THREE.Vector3(-r*2.5, -r*2.5 + len, 0)]
+            ];
+            corners.forEach(c => group.add(createLoop(c)));
+
+        } else if (index === 1) { // Venus - Publications (Abstract Orbital)
+             // Main Circle
+             group.add(createArc(r * 2.0, 0, Math.PI * 2, matStrong));
+             
+             // Intersecting Ellipse (simulated by scaling a circle)
+             const ellipsePts = [];
+             for(let i=0; i<=64; i++) {
+                 const t = (i/64) * Math.PI * 2;
+                 ellipsePts.push(new THREE.Vector3(Math.cos(t)*r*2.8, Math.sin(t)*r*1.2, 0));
+             }
+             const ellipse = createLoop(ellipsePts);
+             ellipse.rotation.z = Math.PI / 4;
+             group.add(ellipse);
+
+             // Another Intersecting Ellipse
+             const ellipsePts2 = [];
+             for(let i=0; i<=64; i++) {
+                 const t = (i/64) * Math.PI * 2;
+                 ellipsePts2.push(new THREE.Vector3(Math.cos(t)*r*2.8, Math.sin(t)*r*1.2, 0));
+             }
+             const ellipse2 = createLoop(ellipsePts2);
+             ellipse2.rotation.z = -Math.PI / 4;
+             group.add(ellipse2);
+             
+             // Vertical Data Lines
+             const l1 = [new THREE.Vector3(r*2.2, r*0.5, 0), new THREE.Vector3(r*2.2, -r*0.5, 0)];
+             const l2 = [new THREE.Vector3(-r*2.2, r*0.5, 0), new THREE.Vector3(-r*2.2, -r*0.5, 0)];
+             group.add(createLoop(l1));
+             group.add(createLoop(l2));
+
+        } else if (index === 2) { // Earth - Tech/HUD (Diamond & Brackets)
+            // Diamond
+            const d1 = [
+                new THREE.Vector3(0, r*2.0, 0),
+                new THREE.Vector3(r*2.0, 0, 0),
+                new THREE.Vector3(0, -r*2.0, 0),
+                new THREE.Vector3(-r*2.0, 0, 0),
+                new THREE.Vector3(0, r*2.0, 0)
+            ];
+            group.add(createLoop(d1, matStrong));
+            
+            // Outer Circle segments
+            group.add(createArc(r * 2.5, 0, Math.PI * 0.4));
+            group.add(createArc(r * 2.5, Math.PI, Math.PI * 1.4));
+            
+            // Crosshair lines
+            const l1 = [new THREE.Vector3(-r*3, 0, 0), new THREE.Vector3(-r*1.5, 0, 0)];
+            const l2 = [new THREE.Vector3(r*1.5, 0, 0), new THREE.Vector3(r*3, 0, 0)];
+            group.add(createLoop(l1));
+            group.add(createLoop(l2));
+
+        } else { // Mars - Publications (Abstract Tech)
+             // Inverted Triangle
+             const t1 = [
+                 new THREE.Vector3(-r*2.0, r*1.5, 0),
+                 new THREE.Vector3(r*2.0, r*1.5, 0),
+                 new THREE.Vector3(0, -r*2.0, 0),
+                 new THREE.Vector3(-r*2.0, r*1.5, 0)
+             ];
+             group.add(createLoop(t1, matStrong));
+             
+             // Inner Triangle
+             const t2 = [
+                 new THREE.Vector3(-r*1.0, r*0.8, 0),
+                 new THREE.Vector3(r*1.0, r*0.8, 0),
+                 new THREE.Vector3(0, -r*1.0, 0),
+                 new THREE.Vector3(-r*1.0, r*0.8, 0)
+             ];
+             group.add(createLoop(t2));
+
+             // Outer Circle Segments
+             group.add(createArc(r * 2.5, Math.PI * 0.2, Math.PI * 0.8));
+             group.add(createArc(r * 2.5, Math.PI * 1.2, Math.PI * 1.8));
+             
+             // Side Vertical Bars
+             const v1 = [new THREE.Vector3(-r*3.0, -r, 0), new THREE.Vector3(-r*3.0, r, 0)];
+             const v2 = [new THREE.Vector3(r*3.0, -r, 0), new THREE.Vector3(r*3.0, r, 0)];
+             group.add(createLoop(v1));
+             group.add(createLoop(v2));
+        }
+        
+        return group;
+    },
+
+    activate(index) {
+        this.patterns.forEach((p, i) => {
+            if (i === index) {
+                p.visible = true;
+                p.userData.targetProgress = 1;
+            } else {
+                p.userData.targetProgress = 0;
+            }
+        });
+    },
+    
+    update() {
+        const speed = 0.005; // Constant speed for linear animation
+        this.patterns.forEach(p => {
+            if (!p.visible && p.userData.progress <= 0) return;
+            
+            const target = p.userData.targetProgress;
+            const current = p.userData.progress;
+            
+            let next = current;
+            if (current < target) {
+                next = Math.min(target, current + speed);
+            } else if (current > target) {
+                next = Math.max(target, current - speed);
+            }
+            
+            if (next === 0 && target === 0) p.visible = false;
+            
+            p.userData.progress = next;
+
+            // Update draw range for line animation
+            p.children.forEach(child => {
+                if (child.isLine && child.userData.totalPoints) {
+                    const count = Math.floor(child.userData.totalPoints * next);
+                    child.geometry.setDrawRange(0, count);
+                }
+            });
+
+            if (p.visible) {
+                // Rotate slightly for "alive" feel
+                p.rotation.z += 0.001; 
+                p.rotation.y += 0.002;
+            }
+        });
+    }
+};// Initialize patterns
+PlanetPatterns.init(planets);
+
 let followTarget = null;
 let followOffset = new THREE.Vector3(0, 18, 60);
 let currentFocusR = 30; // Default to Sun/Overview radius
+let currentTargetOffset = new THREE.Vector3();
+let currentTextLayout = "center";
+
+const planetLayouts = {
+    0: { textSide: 'left', planetSide: 'right' }, // Mercury
+    1: { textSide: 'right', planetSide: 'left' }, // Venus
+    2: { textSide: 'left', planetSide: 'right' }, // Earth
+    3: { textSide: 'left', planetSide: 'right' }, // Mars
+};
 
 function focusPlanet(i, onFocused) {
     if (i === "overview") {
+        PlanetPatterns.activate(-1); // Deactivate all patterns
         currentFocusR = 30;
         followTarget = null;
+        currentTargetOffset.set(0, 0, 0);
+        if (introFadeState.active && introFadeState.phase === 'out') {
+            introFadeState.nextLayout = "center";
+        } else {
+            currentTextLayout = "center";
+        }
         __stopFollowingMode();
         animateCameraTo(new THREE.Vector3(0, 800, 0), new THREE.Vector3(0, 0, 0), 1.4);
         return;
@@ -1755,13 +2222,31 @@ function focusPlanet(i, onFocused) {
     
     followOffset.copy(offset);
     followTarget = p.mesh;
+
+    // Calculate offsets
+    const layout = planetLayouts[i] || { textSide: 'center', planetSide: 'center' };
+    if (introFadeState.active && introFadeState.phase === 'out') {
+        introFadeState.nextLayout = layout.textSide;
+    } else {
+        currentTextLayout = layout.textSide;
+    }
+    const targetOffset = getPlanetTargetOffset(i, r);
+    currentTargetOffset.copy(targetOffset);
+
+    // Deactivate all patterns during transition
+    PlanetPatterns.activate(-1);
+
     __startFollowingMode();
-    const getTarget = () => p.mesh.getWorldPosition(new THREE.Vector3());
+    const getTarget = () => p.mesh.getWorldPosition(new THREE.Vector3()).add(currentTargetOffset);
     const getPos = tgt => tgt.clone().add(followOffset);
     animateCameraTo(getPos, getTarget, 1.2, () => {
         const tgt = getTarget();
         camera.position.copy(getPos(tgt));
         controls.target.copy(tgt);
+        
+        // Start drawing pattern upon arrival
+        PlanetPatterns.activate(i);
+        
         if (typeof onFocused === "function") onFocused();
     });
 }
@@ -1773,8 +2258,8 @@ let projectMoonsInitialized = false;
 function randomizeMoonsOffsets(arr, planetIndex, frontDir, thetaPhase = 0) {
     const host = planets[planetIndex];
     if (!host || !arr.length) return;
-    const Rmin = host.spec.r * 2.1;
-    const Rmax = host.spec.r * 2.2;
+    const Rmin = host.spec.r * 1;
+    const Rmax = host.spec.r * 1.2;
     const Rmid = (Rmin + Rmax) * 0.5;
     const forward = frontDir.clone().normalize();
     // Persist front direction for this set so animations don't depend on camera
@@ -1786,6 +2271,9 @@ function randomizeMoonsOffsets(arr, planetIndex, frontDir, thetaPhase = 0) {
     // Prepare a temporary camera posed at the predicted final follow-camera for this planet
     // so we can ensure randomly placed moons will appear on-screen when focused.
     const planetWorld = host.mesh.getWorldPosition(new THREE.Vector3());
+    const targetOffset = getPlanetTargetOffset(planetIndex, host.spec.r);
+    const lookAtTarget = planetWorld.clone().add(targetOffset);
+
     const camFinalPos = computeFinalCameraPosForPlanet(planetIndex) || camera.position.clone();
     __tmpCam.fov = camera.fov;
     __tmpCam.aspect = camera.aspect;
@@ -1793,7 +2281,7 @@ function randomizeMoonsOffsets(arr, planetIndex, frontDir, thetaPhase = 0) {
     __tmpCam.far = camera.far;
     __tmpCam.updateProjectionMatrix();
     __tmpCam.position.copy(camFinalPos);
-    __tmpCam.lookAt(planetWorld);
+    __tmpCam.lookAt(lookAtTarget);
     __tmpCam.updateMatrixWorld(); // Ensure matrixWorld is up to date for project/unproject
     __tmpCam.matrixWorldInverse.copy(__tmpCam.matrixWorld).invert();
 
@@ -1840,9 +2328,13 @@ function randomizeMoonsOffsets(arr, planetIndex, frontDir, thetaPhase = 0) {
     // - Outside planet radius (~0.6 NDC)
     // - Separated from each other
     const iterations = 15;
-    const planetNDCRadius = 0.6; // Planet radius ~0.5 + margin
+    const planetNDCRadius = 0; // Planet radius ~0.5 + margin
     const screenNDCBound = 0.85;  // Keep inside 0.9
     
+    // Calculate planet center in NDC
+    const planetNDC = planetWorld.clone().project(__tmpCam);
+    const aspect = __tmpCam.aspect;
+
     for (let iter = 0; iter < iterations; iter++) {
         // Project all to NDC
         moonData.forEach(m => {
@@ -1855,14 +2347,28 @@ function randomizeMoonsOffsets(arr, planetIndex, frontDir, thetaPhase = 0) {
             let fx = 0, fy = 0;
             
             // A. Planet Repulsion
-            const distToCenter = Math.sqrt(m.ndc.x * m.ndc.x + m.ndc.y * m.ndc.y);
+            // Account for aspect ratio to ensure circular repulsion in screen space
+            const dx = (m.ndc.x - planetNDC.x) * aspect;
+            const dy = m.ndc.y - planetNDC.y;
+            const distToCenter = Math.sqrt(dx * dx + dy * dy);
+            
+            // minPlanetDist is in "vertical NDC units" (since we normalized X by aspect)
             const minPlanetDist = planetNDCRadius + m.ndcRadius * 0.5;
+            
             if (distToCenter < minPlanetDist) {
-                const pushDirX = distToCenter > 0 ? m.ndc.x / distToCenter : (Math.random()-0.5);
-                const pushDirY = distToCenter > 0 ? m.ndc.y / distToCenter : (Math.random()-0.5);
+                // Direction in corrected space
+                const pushDirX_corr = distToCenter > 0 ? dx / distToCenter : (Math.random()-0.5);
+                const pushDirY_corr = distToCenter > 0 ? dy / distToCenter : (Math.random()-0.5);
+                
                 const overlap = minPlanetDist - distToCenter;
-                fx += pushDirX * overlap * 0.8;
-                fy += pushDirY * overlap * 0.8;
+                
+                // Convert back to NDC space for force application
+                // fx needs to be divided by aspect because a small change in "corrected X" 
+                // corresponds to a smaller change in NDC X if aspect > 1?
+                // Wait: dx = x * aspect. x = dx / aspect.
+                // So force in X = force_corr / aspect.
+                fx += (pushDirX_corr * overlap * 0.8) / aspect;
+                fy += pushDirY_corr * overlap * 0.8;
             }
 
             // B. Screen Bounds Constraint
@@ -1875,16 +2381,19 @@ function randomizeMoonsOffsets(arr, planetIndex, frontDir, thetaPhase = 0) {
             // C. Moon-Moon Repulsion
             moonData.forEach(other => {
                 if (m === other) return;
-                const dx = m.ndc.x - other.ndc.x;
+                // Also correct for aspect ratio here for circular moon shapes
+                const dx = (m.ndc.x - other.ndc.x) * aspect;
                 const dy = m.ndc.y - other.ndc.y;
                 const dist = Math.sqrt(dx*dx + dy*dy);
-                const minDist = (m.ndcRadius + other.ndcRadius) * 0.9; 
+                // Increase spacing factor to force them to spread out more around the planet
+                const minDist = (m.ndcRadius + other.ndcRadius) * 1.1; 
                 if (dist < minDist) {
-                    const pushDirX = dist > 0 ? dx / dist : (Math.random()-0.5);
-                    const pushDirY = dist > 0 ? dy / dist : (Math.random()-0.5);
+                    const pushDirX_corr = dist > 0 ? dx / dist : (Math.random()-0.5);
+                    const pushDirY_corr = dist > 0 ? dy / dist : (Math.random()-0.5);
                     const overlap = minDist - dist;
-                    fx += pushDirX * overlap * 0.4; // Softer push between moons
-                    fy += pushDirY * overlap * 0.4;
+                    
+                    fx += (pushDirX_corr * overlap * 0.6) / aspect; // Stronger push
+                    fy += pushDirY_corr * overlap * 0.6;
                 }
             });
 
@@ -2141,6 +2650,19 @@ function waitForSpritesReady(arr, timeoutMs = 1200) {
 }
 
 // Predict the final camera position for a given planet index using the same logic as focusPlanet
+function getPlanetTargetOffset(i, r) {
+    const layout = planetLayouts[i] || { textSide: 'center', planetSide: 'center' };
+    const shift = r * (camera.aspect > 1 ? camera.aspect : 1) * 0.6;
+    const offset = new THREE.Vector3(0, 0, 0);
+    
+    if (layout.planetSide === 'right') {
+        offset.x = -shift;
+    } else if (layout.planetSide === 'left') {
+        offset.x = shift;
+    }
+    return offset;
+}
+
 function computeFinalCameraPosForPlanet(i) {
     const p = planets[i];
     if (!p) return null;
@@ -2154,7 +2676,8 @@ function computeFinalCameraPosForPlanet(i) {
     const offset = dir.multiplyScalar(dist);
 
     const tgt = p.mesh.getWorldPosition(new THREE.Vector3());
-    return tgt.clone().add(offset);
+    const targetOffset = getPlanetTargetOffset(i, r);
+    return tgt.clone().add(targetOffset).add(offset);
 }
 
 // Precompute and lock each moon's world size so that at the anticipated final camera
@@ -2217,7 +2740,7 @@ navButtons.about?.addEventListener("click", () => {
     setActive("about");
     hideMoons(projectMoons);
     hideMoons(publicationsMoons);
-    updateIntroSprite(
+    transitionIntroSprite(
         "About Me",
         `<div style="text-align: justify;"> <div style="margin-bottom: 12px; text-align: center; width: 100%;"> <a href='static/pdf/Resume.pdf' target='_blank'>CV</a> </div> <br> Hi! My name is Benedict, but you can call me Ben for short. I am a Master computer science student at Ontario Tech University. My research area is human-computer interaction, focusing on novel interactions with hardware like pen-based devices, eye-tracking, and brain computer interfaces. Recently, my research has been creating interactions with Large Language Models.<br><br>
     When I was young, around third grade, I was passionate about being an inventor, in the sense that I wanted to create something never made before and use it to help people who couldn't do a specific task. But that morphed when I was introduced to computer programming. I was amused by how you can put your “heart and soul” into a program and do exactly what you envisioned, meaning your legacy can be imprinted into your programs for generations. My desired legacy is to give to people worldwide, like aiding the blind or advancing neural interfaces. These “dreams” may seem distant, but someone must take the first step, even if no one is willing.
@@ -2229,7 +2752,7 @@ navButtons.projects?.addEventListener("click", () => {
     if (activeSection === "projects") return;
     setActive("projects");
     hideMoons(publicationsMoons);
-    updateIntroSprite("Projects", "Click for more info. More repos <a href='https://github.com/Benedict-Leung?tab=repositories' target='_blank'>here</a>.");
+    transitionIntroSprite("Projects", "Click for more info. More repos <a href='https://github.com/Benedict-Leung?tab=repositories' target='_blank'>here</a>.");
     // Start moons immediately using a deterministic front (+Z), independent of camera
     {
         const frontDir = new THREE.Vector3(0, 0, 1);
@@ -2252,7 +2775,7 @@ navButtons.publications?.addEventListener("click", () => {
     if (activeSection === "publications") return;
     setActive("publications");
     hideMoons(projectMoons);
-    updateIntroSprite("Publications", "2 in progress - <a href='https://scholar.google.com/citations?user=ofhVl3wAAAAJ&hl=en&oi=ao' target='_blank'>Google Scholar</a>");
+    transitionIntroSprite("Publications", "2 in progress - <a href='https://scholar.google.com/citations?user=ofhVl3wAAAAJ&hl=en&oi=ao' target='_blank'>Google Scholar</a>");
     // Start moons immediately using a deterministic front (+Z), independent of camera
     {
         const frontDir = new THREE.Vector3(0, 0, 1);
@@ -2276,7 +2799,7 @@ navButtons.contact?.addEventListener("click", () => {
     setActive("contact");
     hideMoons(projectMoons);
     hideMoons(publicationsMoons);
-    updateIntroSprite("Contact", "<div><a href='mailto:benedict.leung1@ontariotechu.net' target='_blank'>Email</a> - benedict.leung1@ontariotechu.net</div><div><a href='https://www.linkedin.com/in/ben--leung' target='_blank'>LinkedIn</a></div>");
+    transitionIntroSprite("Contact", "<div><a href='mailto:benedict.leung1@ontariotechu.net' target='_blank'>Email</a> - benedict.leung1@ontariotechu.net</div><div><a href='https://www.linkedin.com/in/ben--leung' target='_blank'>LinkedIn</a></div>");
     focusPlanet(2);
 });
 navButtons.planets?.addEventListener("click", () => {
@@ -2284,7 +2807,7 @@ navButtons.planets?.addEventListener("click", () => {
     setActive("planets");
     hideMoons(projectMoons);
     hideMoons(publicationsMoons);
-    updateIntroSprite("Benedict Leung", "Computer Science, MSc");
+    transitionIntroSprite("Benedict Leung", "Computer Science, MSc");
     focusPlanet("overview");
 });
 
@@ -2604,8 +3127,6 @@ function render(now) {
     const dt = Math.max(0, (now - lastTime) / 1000);
     lastTime = now;
     // Update smoothed FPS estimate
-    const fps = dt > 0 ? 1 / dt : 60;
-    __fpsEMA = __fpsEMA * 0.9 + fps * 0.1;
     // Skip heavy updates when the page is hidden
     if (document.hidden) {
         controls.update();
@@ -2613,6 +3134,9 @@ function render(now) {
         requestAnimationFrame(render);
         return;
     }
+    
+    PlanetPatterns.update();
+
     planetSpecs.forEach((spec, idx) => {
         const p = planets[idx];
         // Update elliptical orbit only when not frozen; keep initial placement otherwise
@@ -2863,14 +3387,26 @@ function render(now) {
         // Ensure it doesn't clip near plane
         if (z > -camera.near - 0.1) z = -camera.near - 0.1;
         
-        introSprite.position.set(0, 0, z);
+        // Calculate X offset based on layout
+        const wpp = pxToWorld(Math.abs(z), clientHeight);
+        const viewW = renderer.domElement.clientWidth;
+        const visibleWidth = viewW * wpp;
+        
+        let xOffset = 0;
+        if (currentTextLayout === 'left') {
+            xOffset = -visibleWidth * 0.25;
+        } else if (currentTextLayout === 'right') {
+            xOffset = visibleWidth * 0.25;
+        }
+        
+        introSprite.position.set(xOffset, 0, z);
         
         // Scale to keep constant screen size
         // Match CSS: max-width: clamp(400px, 90%, 800px)
-        const viewW = renderer.domElement.clientWidth;
+        // const viewW = renderer.domElement.clientWidth;
         const targetPx = Math.max(400, Math.min(800, viewW * 0.9));
 
-        const wpp = pxToWorld(Math.abs(z), clientHeight);
+        // const wpp = pxToWorld(Math.abs(z), clientHeight);
         const targetW = targetPx * wpp;
         
         // Use actual aspect ratio from userData if available, else default to 0.5 (2:1)
@@ -2889,7 +3425,7 @@ function render(now) {
     }
 
     if (followTarget && !__isAnimatingCam) {
-        const targetPos = followTarget.getWorldPosition(__vTemp3.set(0, 0, 0));
+        const targetPos = followTarget.getWorldPosition(__vTemp3.set(0, 0, 0)).add(currentTargetOffset);
         const desiredCamPos = targetPos.clone().add(followOffset);
         const lambda = 6.0;
         const k = 1 - Math.exp(-lambda * dt);
@@ -2946,6 +3482,8 @@ function render(now) {
         _render_camUp.set(e[4], e[5], e[6]);
         _render_camBack.set(e[8], e[9], e[10]); // Points towards camera
 
+        const moonPosCache = new Map();
+
         allPillSprites.forEach(p => {
             const moon = p.userData.parentMoon;
             if (!moon || !moon.visible) {
@@ -2968,8 +3506,12 @@ function render(now) {
             const sy = p.userData.sy;
             
             // Start at moon position
-            moon.getWorldPosition(__vTemp3);
-            p.position.copy(__vTemp3);
+            let mPos = moonPosCache.get(moon);
+            if (!mPos) {
+                mPos = moon.getWorldPosition(new THREE.Vector3());
+                moonPosCache.set(moon, mPos);
+            }
+            p.position.copy(mPos);
             
             // Add offsets along camera plane vectors
             p.position.addScaledVector(_render_camRight, sx * scaleX);

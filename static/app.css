@@ -4,7 +4,11 @@ body {
     margin: 0;
     background: #000;
     color: #fff;
-    font-family: system-ui, Segoe UI, Roboto, Arial;
+    font-family: "Raleway", sans-serif;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: "Oswald", sans-serif;
 }
 
 nav {
@@ -32,6 +36,10 @@ nav button {
     padding: 6px 10px;
     border-radius: 6px;
     cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 400;
+    font-family: "Oswald", sans-serif;
 
     text-decoration: none;
     position: relative;
