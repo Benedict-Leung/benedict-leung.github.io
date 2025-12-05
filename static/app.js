@@ -2371,7 +2371,7 @@ function randomizeMoonsOffsets(arr, planetIndex, frontDir, thetaPhase = 0) {
     // - Inside screen bounds (0.9 NDC)
     // - Outside planet radius (~0.6 NDC)
     // - Separated from each other
-    const iterations = 15;
+    const iterations = 150;
     const planetNDCRadius = 0; // Planet radius ~0.5 + margin
     const screenNDCBound = 0.75;  // Keep inside 0.9
     
@@ -3156,14 +3156,32 @@ function pxToWorld(dist, clientHeight) {
     return worldPerPixel;
 }
 
-function applyScreenSpaceScale(arr, planetIndex, clientHeight) {
+function applyScreenSpaceScale(arr, planetIndex, clientHeight, dt = 0.016) {
     if (!arr.length) return;
     const planet = planets[planetIndex];
     if (!planet) return;
     arr.forEach(m => {
         const bs = m.userData?.baseScale;
         if (!bs) return;
-        const hf = m.userData?.isHovered ? 1.35 : 1.0;
+        
+        // Target hover factor
+        const targetHf = m.userData?.isHovered ? 1.35 : 1.0;
+        
+        // Initialize current hover factor if missing
+        if (typeof m.userData.currentHf !== 'number') m.userData.currentHf = 1.0;
+        
+        // Linear animation: move towards target at constant speed
+        const speed = 2.0; // Units per second
+        const step = speed * dt;
+        
+        if (m.userData.currentHf < targetHf) {
+            m.userData.currentHf = Math.min(targetHf, m.userData.currentHf + step);
+        } else if (m.userData.currentHf > targetHf) {
+            m.userData.currentHf = Math.max(targetHf, m.userData.currentHf - step);
+        }
+        
+        const hf = m.userData.currentHf;
+
         if (m.userData?.lockScale && typeof m.userData.baseWorldSize === "number") {
             // Keep the world size fixed (computed for final camera position), only apply hover multiplier
             const w = m.userData.baseWorldSize * hf;
@@ -3435,8 +3453,8 @@ function render(now) {
 
     // Keep moons a constant size on screen: compute world scale from camera FOV and distance
     const clientHeight = renderer.domElement.clientHeight;
-    applyScreenSpaceScale(projectMoons, 1, clientHeight);
-    applyScreenSpaceScale(publicationsMoons, 3, clientHeight);
+    applyScreenSpaceScale(projectMoons, 1, clientHeight, dt);
+    applyScreenSpaceScale(publicationsMoons, 3, clientHeight, dt);
 
     // Update intro sprite position and scale
     if (introSprite) {
