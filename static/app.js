@@ -3449,32 +3449,38 @@ function render(now) {
         // Ensure it doesn't clip near plane
         if (z > -camera.near - 0.1) z = -camera.near - 0.1;
         
-        // Calculate X offset based on layout
+        const clientHeight = renderer.domElement.clientHeight;
         const wpp = pxToWorld(Math.abs(z), clientHeight);
         const viewW = renderer.domElement.clientWidth;
         const visibleWidth = viewW * wpp;
         
+        // Scale to keep constant screen size
+        // Match CSS: max-width: clamp(400px, 90%, 800px)
+        // Allow shrinking below 400px on small screens so borders remain visible
+        const targetPx = Math.min(800, Math.max(280, viewW * 0.92));
+        const targetW = targetPx * wpp;
+
         let xOffset = 0;
-        if (currentTextLayout === 'left') {
-            xOffset = -visibleWidth * 0.25;
-        } else if (currentTextLayout === 'right') {
-            xOffset = visibleWidth * 0.25;
+        // On larger screens, push to the side if layout requests it
+        if (viewW > 768) {
+            const margin = visibleWidth * 0.05; // 5% margin from edge
+            if (currentTextLayout === 'left') {
+                xOffset = -visibleWidth/2 + margin + targetW/2;
+            } else if (currentTextLayout === 'right') {
+                xOffset = visibleWidth/2 - margin - targetW/2;
+            }
         }
         
         introSprite.position.set(xOffset, 0, z);
-        
-        // Scale to keep constant screen size
-        // Match CSS: max-width: clamp(400px, 90%, 800px)
-        // const viewW = renderer.domElement.clientWidth;
-        const targetPx = Math.max(400, Math.min(800, viewW * 0.9));
-
-        // const wpp = pxToWorld(Math.abs(z), clientHeight);
-        const targetW = targetPx * wpp;
         
         // Use actual aspect ratio from userData if available, else default to 0.5 (2:1)
         let aspect = 0.5;
         if (introSprite.userData.canvasWidth && introSprite.userData.canvasHeight) {
             aspect = introSprite.userData.canvasHeight / introSprite.userData.canvasWidth;
+        } else if (introSprite.material?.map?.image) {
+             // Fallback to texture dimensions if userData not set
+             const img = introSprite.material.map.image;
+             if (img.width && img.height) aspect = img.height / img.width;
         }
         
         const targetH = targetW * aspect;
