@@ -1434,17 +1434,22 @@ function attachOverlayToSprite(sprite, label, description, links) {
             const maxW = Math.round(S * ratio * 0.78); // wrap width in baseline pixels
             const descLineH = Math.round(S * 0.095);
             let y = Math.max(Math.round(size * 0.62), labelEndY + Math.round(S * 0.08));
+            
+            // Calculate max Y allowed for description to avoid overlapping pills
+            // Pills start at size * 0.82. Leave some padding.
+            const maxY = Math.round(size * 0.80);
+
             for (let i = 0; i < words.length; i++) {
                 const test = line ? line + " " + words[i] : words[i];
                 if (ctx.measureText(test).width > maxW) {
-                    ctx.fillText(line, size / 2, y);
+                    if (y < maxY) ctx.fillText(line, size / 2, y);
                     line = words[i];
                     y += descLineH;
                 } else {
                     line = test;
                 }
             }
-            if (line) ctx.fillText(line, size / 2, y);
+            if (line && y < maxY) ctx.fillText(line, size / 2, y);
         }
 
         // Create main overlay sprite
@@ -2258,8 +2263,8 @@ let projectMoonsInitialized = false;
 function randomizeMoonsOffsets(arr, planetIndex, frontDir, thetaPhase = 0) {
     const host = planets[planetIndex];
     if (!host || !arr.length) return;
-    const Rmin = host.spec.r * 1;
-    const Rmax = host.spec.r * 1.2;
+    const Rmin = host.spec.r * 0.5;
+    const Rmax = host.spec.r * 0.8;
     const Rmid = (Rmin + Rmax) * 0.5;
     const forward = frontDir.clone().normalize();
     // Persist front direction for this set so animations don't depend on camera
@@ -2292,6 +2297,15 @@ function randomizeMoonsOffsets(arr, planetIndex, frontDir, thetaPhase = 0) {
     let moonData = [];
     const viewH = Math.max(1, renderer?.domElement?.clientHeight || window.innerHeight || 1);
 
+    // Calculate visible bounds at planet depth to constrain initial radius
+    const distToTarget = camFinalPos.distanceTo(lookAtTarget);
+    const vFOV = THREE.MathUtils.degToRad(__tmpCam.fov);
+    const visibleHeight = 2 * Math.tan(vFOV / 2) * distToTarget * 0.85;
+    const visibleWidth = visibleHeight * __tmpCam.aspect * 0.85;
+    const minDim = Math.min(visibleWidth, visibleHeight);
+    // Constrain to ~85% of the screen to be safe and avoid edge crowding
+    const maxSafeR = (minDim / 2) * 0.5; 
+
     for (let k = 0; k < n; k++) {
         const t = (k + 0.5) / n;
         const y = 1 - t;
@@ -2303,16 +2317,46 @@ function randomizeMoonsOffsets(arr, planetIndex, frontDir, thetaPhase = 0) {
             .addScaledVector(forward, y)
             .normalize();
         
-        // Start with a generous radius
-        let radius = Rmid;
+        // Start with a generous radius, but constrain to screen size
+        let radius = Rmin + Math.random() * (Rmax - Rmin);
+        if (radius > maxSafeR) {
+             // Shrink to fit screen, but don't go inside planet (Rmin)
+             radius = Math.max(Rmin, maxSafeR);
+        }
+
         let offset = dir.clone().multiplyScalar(radius);
         
         // Estimate sprite NDC size
         const sprite = arr[k];
-        const pxTarget = Math.max(512, Math.min(512, (sprite?.userData?.overlayPx || sprite?.userData?.basePx || 128) * 4.5));
+        // We assume a large target size (512px) to ensure the collision box is generous
+        const pxTarget = 0; 
         // NDC height is 2.0. Size fraction = pxTarget / viewH.
-        // Use a slightly larger margin for safety
-        const ndcRadius = (pxTarget / viewH) * 1.2; 
+        // Use a larger safety factor (1.5) to ensure the entire sprite + glow/text is well inside
+        // Also enforce a minimum NDC radius to prevent edge-hugging on large screens
+        const ndcRadius = Math.max(0.15, (pxTarget / viewH) * 1.5); 
+
+        // Ensure initial position is on screen
+        const testPos = planetWorld.clone().add(offset);
+        testPos.project(__tmpCam);
+        
+        const aspect = __tmpCam.aspect;
+        const safeMargin = 0.1;
+        const limitY = Math.max(0, 1.0 - ndcRadius - safeMargin);
+        const limitX = Math.max(0, 1.0 - (ndcRadius / aspect) - safeMargin);
+
+        if (Math.abs(testPos.x) > limitX || Math.abs(testPos.y) > limitY) {
+             // Scale towards center instead of clamping to box to preserve circular distribution
+             const scaleX = Math.abs(testPos.x) > limitX ? limitX / Math.abs(testPos.x) : 1;
+             const scaleY = Math.abs(testPos.y) > limitY ? limitY / Math.abs(testPos.y) : 1;
+             const scale = Math.min(scaleX, scaleY);
+             
+             testPos.x *= scale;
+             testPos.y *= scale;
+             
+             // Unproject back to get corrected offset
+             testPos.unproject(__tmpCam);
+             offset.copy(testPos).sub(planetWorld);
+        }
 
         moonData.push({
             id: k,
@@ -2329,7 +2373,7 @@ function randomizeMoonsOffsets(arr, planetIndex, frontDir, thetaPhase = 0) {
     // - Separated from each other
     const iterations = 15;
     const planetNDCRadius = 0; // Planet radius ~0.5 + margin
-    const screenNDCBound = 0.85;  // Keep inside 0.9
+    const screenNDCBound = 0.75;  // Keep inside 0.9
     
     // Calculate planet center in NDC
     const planetNDC = planetWorld.clone().project(__tmpCam);
@@ -2372,28 +2416,46 @@ function randomizeMoonsOffsets(arr, planetIndex, frontDir, thetaPhase = 0) {
             }
 
             // B. Screen Bounds Constraint
-            const bound = screenNDCBound - m.ndcRadius * 0.8;
-            if (m.ndc.x > bound) fx -= (m.ndc.x - bound) * 0.8;
-            if (m.ndc.x < -bound) fx += (-bound - m.ndc.x) * 0.8;
-            if (m.ndc.y > bound) fy -= (m.ndc.y - bound) * 0.8;
-            if (m.ndc.y < -bound) fy += (-bound - m.ndc.y) * 0.8;
+            const boundY = screenNDCBound - m.ndcRadius * 0.8;
+            const boundX = screenNDCBound - (m.ndcRadius / aspect) * 0.8;
 
-            // C. Moon-Moon Repulsion
+            if (m.ndc.x > boundX) fx -= (m.ndc.x - boundX) * 0.8;
+            if (m.ndc.x < -boundX) fx += (-boundX - m.ndc.x) * 0.8;
+            if (m.ndc.y > boundY) fy -= (m.ndc.y - boundY) * 0.8;
+            if (m.ndc.y < -boundY) fy += (-boundY - m.ndc.y) * 0.8;
+
+            // C. Moon-Moon Repulsion (Boids Separation)
             moonData.forEach(other => {
                 if (m === other) return;
                 // Also correct for aspect ratio here for circular moon shapes
                 const dx = (m.ndc.x - other.ndc.x) * aspect;
                 const dy = m.ndc.y - other.ndc.y;
                 const dist = Math.sqrt(dx*dx + dy*dy);
-                // Increase spacing factor to force them to spread out more around the planet
-                const minDist = (m.ndcRadius + other.ndcRadius) * 1.1; 
-                if (dist < minDist) {
-                    const pushDirX_corr = dist > 0 ? dx / dist : (Math.random()-0.5);
-                    const pushDirY_corr = dist > 0 ? dy / dist : (Math.random()-0.5);
-                    const overlap = minDist - dist;
+                
+                // Boids Separation: Steer to avoid crowding local flockmates
+                // We want a generous spacing to avoid overlap
+                const desiredSeparation = (m.ndcRadius + other.ndcRadius) * 1.5; 
+                
+                if (dist < desiredSeparation) {
+                    // Vector pointing away from neighbor
+                    let pushDirX_corr = dx;
+                    let pushDirY_corr = dy;
                     
-                    fx += (pushDirX_corr * overlap * 0.6) / aspect; // Stronger push
-                    fy += pushDirY_corr * overlap * 0.6;
+                    // Normalize
+                    if (dist > 0) {
+                        pushDirX_corr /= dist;
+                        pushDirY_corr /= dist;
+                    } else {
+                        pushDirX_corr = (Math.random() - 0.5);
+                        pushDirY_corr = (Math.random() - 0.5);
+                    }
+
+                    // Weight by distance (closer = stronger repulsion)
+                    // Boids typically use inverse distance weighting
+                    const weight = (desiredSeparation - dist) / desiredSeparation;
+                    
+                    fx += (pushDirX_corr * weight * 1.2) / aspect; 
+                    fy += pushDirY_corr * weight * 1.2;
                 }
             });
 
