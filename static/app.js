@@ -937,7 +937,7 @@ const __loadPromises = [];
 let __orbitsFrozen = true;
 
 // Cameras & controls
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 5000);
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 50000);
 camera.position.set(0, 800, 0);
 camera.lookAt(0, 0, 0);
 scene.add(camera); // Add camera to scene so children are rendered
@@ -1372,6 +1372,290 @@ function loadRealMarsTextures(planet) {
     mat.metalness = 0.0;
 }
 
+function loadRealJupiterTextures(planet) {
+    if (!planet || planet.spec?.name !== "Jupiter") return;
+    const mat = planet.mesh.material;
+    const base = IMAGE_BASE + "Jupiter/";
+    
+    // Load main texture
+    const pJupCol = loadTextureFast(base + "realj2k.jpg", { color: true, wrapRepeat: true, preferMipmaps: true }).then(tex => {
+        if (tex) {
+            mat.map = tex;
+            mat.needsUpdate = true;
+        }
+    });
+    __loadPromises.push(pJupCol);
+
+    // Load bump map
+    loadTextureFast(base + "jupiter-hubble-2015-bump.jpg", { color: false, wrapRepeat: true, preferMipmaps: false }).then(tex => {
+        if (tex) {
+             mat.displacementMap = tex;
+             mat.displacementScale = 0.05; 
+             mat.needsUpdate = true;
+        }
+    });
+    
+    // Rings
+    loadTextureFast(base + "JupiterRings.png", { color: true, wrapRepeat: true, preferMipmaps: true }).then(tex => {
+        if (tex) {
+            // Jupiter radius ~70k km. Rings ~92k to ~226k km.
+            // Ratios: Inner ~1.3, Outer ~3.2
+            const innerRadius = planet.spec.r * 1.3;
+            const outerRadius = planet.spec.r * 3.2;
+            const ringGeo = new THREE.RingGeometry(innerRadius, outerRadius, 128);
+            
+            // Remap UVs for strip texture
+            const pos = ringGeo.attributes.position;
+            const uv = ringGeo.attributes.uv;
+            const v3 = new THREE.Vector3();
+            for (let i = 0; i < pos.count; i++) {
+                v3.fromBufferAttribute(pos, i);
+                const len = v3.length();
+                const u = (len - innerRadius) / (outerRadius - innerRadius);
+                uv.setXY(i, u, 0.5); 
+            }
+            
+            const ringMat = new THREE.MeshStandardMaterial({
+                map: tex,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.8,
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            
+            const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+            ringMesh.rotation.x = -Math.PI / 2; 
+            planet.mesh.add(ringMesh);
+        }
+    });
+    
+    mat.roughness = 0.5;
+    mat.metalness = 0.0;
+}
+
+function loadRealSaturnTextures(planet) {
+    if (!planet || planet.spec?.name !== "Saturn") return;
+    const mat = planet.mesh.material;
+    const base = IMAGE_BASE + "Saturn/";
+    
+    // Load main texture
+    const pSatCol = loadTextureFast(base + "th_saturn.png", { color: true, wrapRepeat: true, preferMipmaps: true }).then(tex => {
+        if (tex) {
+            mat.map = tex;
+            mat.needsUpdate = true;
+        }
+    });
+    __loadPromises.push(pSatCol);
+
+    // Load bump map
+    loadTextureFast(base + "th_saturnbump.png", { color: false, wrapRepeat: true, preferMipmaps: false }).then(tex => {
+        if (tex) {
+             mat.displacementMap = tex;
+             mat.displacementScale = 0.05; 
+             mat.needsUpdate = true;
+        }
+    });
+    
+    // Rings
+    loadTextureFast(base + "t00fri_gh_saturnrings.png", { color: true, wrapRepeat: true, preferMipmaps: true }).then(tex => {
+        if (tex) {
+            // Saturn radius ~58k km. Rings ~74k to ~140k km (main rings).
+            // Ratios: Inner ~1.27, Outer ~2.4
+            const innerRadius = planet.spec.r * 1.27;
+            const outerRadius = planet.spec.r * 2.4;
+            const ringGeo = new THREE.RingGeometry(innerRadius, outerRadius, 128);
+            
+            // Remap UVs for strip texture
+            const pos = ringGeo.attributes.position;
+            const uv = ringGeo.attributes.uv;
+            const v3 = new THREE.Vector3();
+            for (let i = 0; i < pos.count; i++) {
+                v3.fromBufferAttribute(pos, i);
+                const len = v3.length();
+                const u = (len - innerRadius) / (outerRadius - innerRadius);
+                uv.setXY(i, u, 0.5); 
+            }
+            
+            const ringMat = new THREE.MeshStandardMaterial({
+                map: tex,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.8,
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            
+            const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+            ringMesh.rotation.x = -Math.PI / 2; 
+            planet.mesh.add(ringMesh);
+        }
+    });
+    
+    mat.roughness = 0.5;
+    mat.metalness = 0.0;
+}
+
+function loadRealUranusTextures(planet) {
+    if (!planet || planet.spec?.name !== "Uranus") return;
+    const mat = planet.mesh.material;
+    const base = IMAGE_BASE + "Uranus/";
+    
+    // Load main texture
+    const pUraCol = loadTextureFast(base + "uranusmap.jpg", { color: true, wrapRepeat: true, preferMipmaps: true }).then(tex => {
+        if (tex) {
+            mat.map = tex;
+            mat.needsUpdate = true;
+        }
+    });
+    __loadPromises.push(pUraCol);
+
+    // Rings
+    // Uranus rings are very faint and dark, but we'll visualize them.
+    // Inner radius ~38k km, Outer ~51k km (Epsilon ring).
+    // Planet radius ~25k km.
+    // Ratios: Inner ~1.5, Outer ~2.0
+    loadTextureFast(base + "uranusringcolour.jpg", { color: true, wrapRepeat: true, preferMipmaps: true }).then(tex => {
+        if (tex) {
+            const innerRadius = planet.spec.r * 1.5;
+            const outerRadius = planet.spec.r * 2.0;
+            const ringGeo = new THREE.RingGeometry(innerRadius, outerRadius, 128);
+            
+            // Remap UVs for strip texture
+            const pos = ringGeo.attributes.position;
+            const uv = ringGeo.attributes.uv;
+            const v3 = new THREE.Vector3();
+            for (let i = 0; i < pos.count; i++) {
+                v3.fromBufferAttribute(pos, i);
+                const len = v3.length();
+                const u = (len - innerRadius) / (outerRadius - innerRadius);
+                uv.setXY(i, u, 0.5); 
+            }
+            
+            const ringMat = new THREE.MeshStandardMaterial({
+                map: tex,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.6,
+                roughness: 0.8,
+                metalness: 0.1
+            });
+            
+            // Load transparency map if available
+            loadTextureFast(base + "uranusringtrans.gif", { color: false, wrapRepeat: true, preferMipmaps: true }).then(alphaTex => {
+                if (alphaTex) {
+                    ringMat.alphaMap = alphaTex;
+                    ringMat.needsUpdate = true;
+                }
+            });
+            
+            const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+            ringMesh.rotation.x = -Math.PI / 2; 
+            planet.mesh.add(ringMesh);
+        }
+    });
+    
+    mat.roughness = 0.6;
+    mat.metalness = 0.0;
+}
+
+function loadRealNeptuneTextures(planet) {
+    if (!planet || planet.spec?.name !== "Neptune") return;
+    const mat = planet.mesh.material;
+    const base = IMAGE_BASE + "Neptune/";
+    
+    // Load main texture
+    const pNepCol = loadTextureFast(base + "neptune2k.jpg", { color: true, wrapRepeat: true, preferMipmaps: true }).then(tex => {
+        if (tex) {
+            mat.map = tex;
+            mat.needsUpdate = true;
+        }
+    });
+    __loadPromises.push(pNepCol);
+
+    // Load bump map
+    loadTextureFast(base + "neptune-bump.png", { color: false, wrapRepeat: true, preferMipmaps: false }).then(tex => {
+        if (tex) {
+             mat.displacementMap = tex;
+             mat.displacementScale = 0.05; 
+             mat.needsUpdate = true;
+        }
+    });
+
+    // Load spec map (roughness)
+    loadTextureFast(base + "neptune-spec.png", { color: false, wrapRepeat: true, preferMipmaps: false }).then(tex => {
+        if (tex) {
+            // Invert for roughness (white in spec = shiny = black in roughness)
+            const img = tex.image;
+            __idle(() => {
+                try {
+                    const c = document.createElement("canvas");
+                    c.width = img.width;
+                    c.height = img.height;
+                    const ctx = c.getContext("2d");
+                    ctx.drawImage(img, 0, 0);
+                    const id = ctx.getImageData(0, 0, c.width, c.height);
+                    const d = id.data;
+                    for (let i = 0; i < d.length; i += 4) {
+                        const val = d[i]; // grayscale
+                        const rough = 255 - val; // Invert
+                        d[i] = rough;
+                        d[i+1] = rough;
+                        d[i+2] = rough;
+                    }
+                    ctx.putImageData(id, 0, 0);
+                    const roughTex = new THREE.CanvasTexture(c);
+                    roughTex.wrapS = THREE.RepeatWrapping;
+                    roughTex.wrapT = THREE.RepeatWrapping;
+                    mat.roughnessMap = roughTex;
+                    mat.roughness = 1.0; // Base roughness
+                    mat.needsUpdate = true;
+                } catch (e) {}
+            });
+        }
+    });
+
+    // Rings
+    // Neptune rings are very faint.
+    // Inner radius ~41k km, Outer ~63k km (Adams ring).
+    // Planet radius ~24.6k km.
+    // Ratios: Inner ~1.6, Outer ~2.5
+    loadTextureFast(base + "neptune-rings-new.png", { color: true, wrapRepeat: true, preferMipmaps: true }).then(tex => {
+        if (tex) {
+            const innerRadius = planet.spec.r * 1.6;
+            const outerRadius = planet.spec.r * 2.5;
+            const ringGeo = new THREE.RingGeometry(innerRadius, outerRadius, 128);
+            
+            // Remap UVs for strip texture
+            const pos = ringGeo.attributes.position;
+            const uv = ringGeo.attributes.uv;
+            const v3 = new THREE.Vector3();
+            for (let i = 0; i < pos.count; i++) {
+                v3.fromBufferAttribute(pos, i);
+                const len = v3.length();
+                const u = (len - innerRadius) / (outerRadius - innerRadius);
+                uv.setXY(i, u, 0.5); 
+            }
+            
+            const ringMat = new THREE.MeshStandardMaterial({
+                map: tex,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.6,
+                roughness: 0.8,
+                metalness: 0.1
+            });
+            
+            const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+            ringMesh.rotation.x = -Math.PI / 2; 
+            planet.mesh.add(ringMesh);
+        }
+    });
+    
+    mat.roughness = 0.6;
+    mat.metalness = 0.0;
+}
+
 function attachOverlayToSprite(sprite, label, description, links) {
     try {
         // Cleanup existing overlay/pills to prevent duplicates/ghosts
@@ -1664,7 +1948,7 @@ function onResize() {
 window.addEventListener("resize", onResize);
 
 // lighting
-scene.add(new THREE.AmbientLight(0xffffff, 0.28));
+scene.add(new THREE.AmbientLight(0xffffff, 0.3));
 
 // starfield
 (function makeStarField() {
@@ -1679,7 +1963,7 @@ scene.add(new THREE.AmbientLight(0xffffff, 0.28));
         const pos = [];
         const colors = [];
         const color = new THREE.Color();
-        const r = 4000;
+        const r = 20000;
 
         for (let i = 0; i < layer.count; i++) {
             // Spherical distribution
@@ -1761,7 +2045,7 @@ sunTex.wrapT = THREE.RepeatWrapping;
 const sunMat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffc35b, emissiveMap: sunTex, emissiveIntensity: 0.5, roughness: 1.0, metalness: 0.0 });
 const sun = new THREE.Mesh(getSphereGeometry(30, 48, 48), sunMat);
 planetGroup.add(sun);
-const sunLight = new THREE.PointLight(0xffeecc, 5.5, 6000, 2.0);
+const sunLight = new THREE.PointLight(0xffeecc, 2.5, 0, 0); // Infinite range, no decay to ensure visibility at all distances
 sun.add(sunLight);
 
 const planets = [];
@@ -1777,10 +2061,141 @@ const planetSpecs = [
     { name: "Venus", r: 13 * 0.949, dist: Math.round(160 * 0.723), speed: 0.012 * (365.256 / 224.701), color: 0xe8c07a, e: 0.0068, incDeg: 3.394, OmegaDeg: 76.68, omegaDeg: 54.884, tiltDeg: 177.36, dayLengthDays: 243.025 },
     { name: "Earth", r: 13, dist: 160, speed: 0.012, color: 0x6ea8ff, e: 0.0167, incDeg: 0.0, OmegaDeg: 0.0, omegaDeg: 102.937, tiltDeg: 23.44, dayLengthDays: 0.99726968 },
     { name: "Mars", r: 13 * 0.532, dist: Math.round(160 * 1.524), speed: 0.012 * (365.256 / 686.98), color: 0xff6f4c, e: 0.0934, incDeg: 1.85, OmegaDeg: 49.558, omegaDeg: 286.5, tiltDeg: 25.19, dayLengthDays: 1.025957 },
+    { name: "Jupiter", r: 13 * 10.97, dist: Math.round(160 * 5.203), speed: 0.012 * (365.256 / 4332.59), color: 0xd8ca9d, e: 0.0489, incDeg: 1.305, OmegaDeg: 100.556, omegaDeg: 273.867, tiltDeg: 3.13, dayLengthDays: 0.41354 },
+    { name: "Saturn", r: 13 * 9.14, dist: Math.round(160 * 9.58), speed: 0.012 * (365.256 / 10759), color: 0xe4d5b6, e: 0.0565, incDeg: 2.485, OmegaDeg: 113.715, omegaDeg: 339.392, tiltDeg: 26.73, dayLengthDays: 0.444 },
+    { name: "Uranus", r: 13 * 3.98, dist: Math.round(160 * 19.22), speed: 0.012 * (365.256 / 30687), color: 0xd1e7e7, e: 0.046, incDeg: 0.773, OmegaDeg: 74.006, omegaDeg: 96.541, tiltDeg: 97.77, dayLengthDays: 0.718 },
+    { name: "Neptune", r: 13 * 3.86, dist: Math.round(160 * 30.07), speed: 0.012 * (365.256 / 60190), color: 0x5b5ddf, e: 0.0086, incDeg: 1.77, OmegaDeg: 131.78, omegaDeg: 273.18, tiltDeg: 28.32, dayLengthDays: 0.6713 },
 ];
 
 // Feature flag to toggle cloud generation globally
 const ENABLE_CLOUDS = true;
+
+function generateRockTexture(w, h) {
+    return makeCanvasTexture(w, h, (data, W, H) => {
+        for (let y = 0; y < H; y++) {
+            for (let x = 0; x < W; x++) {
+                const nx = x / W;
+                const ny = y / H;
+                // Base noise
+                let n = valueNoise3(nx * 10, ny * 10, 0, 123);
+                // Detail noise
+                n += 0.5 * valueNoise3(nx * 40, ny * 40, 0, 456);
+                // Cracks/craters
+                n -= 0.3 * Math.abs(valueNoise3(nx * 20, ny * 20, 10, 789) - 0.5);
+                
+                let val = 0.4 + 0.6 * (n / 1.5);
+                val = Math.min(1, Math.max(0.2, val));
+                
+                const c = Math.floor(val * 255);
+                const i = (y * W + x) * 4;
+                data[i] = c;
+                data[i + 1] = c;
+                data[i + 2] = c;
+                data[i + 3] = 255;
+            }
+        }
+    });
+}
+
+// Asteroid Belt
+function createAsteroidBelt() {
+    const totalCount = (typeof __isLowTier !== 'undefined' && __isLowTier) ? 1000 : 4000;
+    
+    // Helper to make a lumpy rock geometry
+    function makeRockGeo(seed) {
+        const geo = new THREE.IcosahedronGeometry(0.6, 1); // Detail 1 = 80 faces
+        const pos = geo.attributes.position;
+        const v = new THREE.Vector3();
+        for (let i = 0; i < pos.count; i++) {
+            v.fromBufferAttribute(pos, i);
+            // Base shape noise
+            let n = valueNoise3(v.x * 2, v.y * 2, v.z * 2, seed);
+            // Detail noise
+            n += 0.5 * valueNoise3(v.x * 5, v.y * 5, v.z * 5, seed + 100);
+            n /= 1.5; // Normalize roughly
+            
+            const displacement = 1 + (n - 0.5) * 0.8; // Significant distortion
+            v.multiplyScalar(displacement);
+            pos.setXYZ(i, v.x, v.y, v.z);
+        }
+        geo.computeVertexNormals();
+        return geo;
+    }
+
+    // Create 3 variations of rock shapes
+    const geos = [makeRockGeo(13.5), makeRockGeo(42.1), makeRockGeo(99.9)];
+    
+    const rockTex = generateRockTexture(256, 256);
+    
+    const mat = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        map: rockTex,
+        bumpMap: rockTex,
+        bumpScale: 0.15,
+        roughness: 0.9,
+        metalness: 0.1,
+        flatShading: false // Use smooth shading with bump map for better texture detail
+    });
+
+    const group = new THREE.Group();
+    const dummy = new THREE.Object3D();
+    const color = new THREE.Color();
+    
+    // Split count among variations
+    const countPerGeo = Math.floor(totalCount / geos.length);
+    
+    const centerDist = 448; 
+    const width = 120;
+
+    geos.forEach((geo) => {
+        // Need to add UVs for texture mapping if Icosahedron doesn't map well, 
+        // but standard Icosahedron has UVs. They might be stretched on distorted geo, 
+        // but for rocks it's usually fine/adds to the effect.
+        
+        const mesh = new THREE.InstancedMesh(geo, mat, countPerGeo);
+        
+        for (let i = 0; i < countPerGeo; i++) {
+            const angle = Math.random() * TAU;
+            const r = centerDist + (Math.random() - 0.5) * width * (Math.random() * 0.5 + 0.5);
+            const y = (Math.random() - 0.5) * 25;
+            
+            const x = Math.cos(angle) * r;
+            const z = Math.sin(angle) * r;
+            
+            dummy.position.set(x, y, z);
+            // Random rotation
+            dummy.rotation.set(Math.random() * TAU, Math.random() * TAU, Math.random() * TAU);
+            
+            // Random scale
+            const s = Math.random() * 1.2 + 0.4;
+            dummy.scale.set(s, s, s);
+            
+            dummy.updateMatrix();
+            mesh.setMatrixAt(i, dummy.matrix);
+
+            // Color variation
+            const type = Math.random();
+            if (type > 0.75) {
+                // S-type: Stony, lighter, slightly reddish/brownish grey
+                color.setHSL(Math.random() * 0.1, 0.2, 0.3 + Math.random() * 0.2);
+            } else {
+                // C-type: Carbonaceous, dark, neutral grey
+                color.setHSL(0, 0, 0.1 + Math.random() * 0.15);
+            }
+            mesh.setColorAt(i, color);
+        }
+        
+        mesh.instanceMatrix.needsUpdate = true;
+        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+        group.add(mesh);
+    });
+    
+    return group;
+}
+
+const asteroidBelt = createAsteroidBelt();
+asteroidBelt.visible = false; // Default hidden for performance
+planetGroup.add(asteroidBelt);
 
 function buildOrbitLine(spec, segments = 256) {
     const positions = new Float32Array((segments + 1) * 3);
@@ -1851,7 +2266,7 @@ planetSpecs.forEach((spec, i) => {
     // Increase tessellation: helps when normal/bump maps emphasize fine relief
     if (spec.name === "Mercury" || spec.name === "Venus") {
         seg = { w: 128, h: 96 };
-    } else if (spec.name === "Mars") {
+    } else if (spec.name === "Mars" || spec.name === "Jupiter" || spec.name === "Saturn" || spec.name === "Uranus" || spec.name === "Neptune") {
         seg = { w: 256, h: 192 };
     }
     let sphereGeo = getSphereGeometry(spec.r, seg.w, seg.h);
@@ -1860,7 +2275,7 @@ planetSpecs.forEach((spec, i) => {
     mesh.position.set(0, 0, 0);
     tiltGroup.add(mesh);
     // Brighten Mars slightly without affecting other planets by using a Mars-only light layer
-    if (spec.name === "Mars") {
+    if (spec.name === "Mars" || spec.name === "Jupiter" || spec.name === "Saturn" || spec.name === "Uranus" || spec.name === "Neptune") {
         // Enable layer 1 on Mars so a light restricted to layer 1 only affects Mars
         try {
             mesh.layers.enable(1);
@@ -1915,6 +2330,69 @@ planetSpecs.forEach((spec, i) => {
         } catch {}
         tiltGroup.add(clouds);
         cloudRotSpeed = 0.5;
+    } else if (ENABLE_CLOUDS && spec.name === "Jupiter") {
+        const cloudTex = textureLoader.load(IMAGE_BASE + "Jupiter/jupiterclouds.png");
+        cloudTex.wrapS = THREE.RepeatWrapping;
+        cloudTex.wrapT = THREE.RepeatWrapping;
+        const cloudMat = new THREE.MeshStandardMaterial({
+            map: cloudTex,
+            transparent: true,
+            opacity: 0.55,
+            depthWrite: false,
+            roughness: 1.0,
+            metalness: 0.0,
+        });
+        const cw = Math.max(24, seg.w - 14),
+            ch = Math.max(16, seg.h - 10);
+        clouds = new THREE.Mesh(getSphereGeometry(spec.r * 1.005, cw, ch), cloudMat);
+        clouds.position.set(0, 0, 0);
+        try {
+            clouds.layers.enable(1);
+        } catch {}
+        tiltGroup.add(clouds);
+        cloudRotSpeed = 2.5;
+    } else if (ENABLE_CLOUDS && spec.name === "Saturn") {
+        const cloudTex = textureLoader.load(IMAGE_BASE + "Saturn/th_saturnclouds.png");
+        cloudTex.wrapS = THREE.RepeatWrapping;
+        cloudTex.wrapT = THREE.RepeatWrapping;
+        const cloudMat = new THREE.MeshStandardMaterial({
+            map: cloudTex,
+            transparent: true,
+            opacity: 0.55,
+            depthWrite: false,
+            roughness: 1.0,
+            metalness: 0.0,
+        });
+        const cw = Math.max(24, seg.w - 14),
+            ch = Math.max(16, seg.h - 10);
+        clouds = new THREE.Mesh(getSphereGeometry(spec.r * 1.005, cw, ch), cloudMat);
+        clouds.position.set(0, 0, 0);
+        try {
+            clouds.layers.enable(1);
+        } catch {}
+        tiltGroup.add(clouds);
+        cloudRotSpeed = 2.3;
+    } else if (ENABLE_CLOUDS && spec.name === "Neptune") {
+        const cloudTex = textureLoader.load(IMAGE_BASE + "Neptune/neptune-clouds.png");
+        cloudTex.wrapS = THREE.RepeatWrapping;
+        cloudTex.wrapT = THREE.RepeatWrapping;
+        const cloudMat = new THREE.MeshStandardMaterial({
+            map: cloudTex,
+            transparent: true,
+            opacity: 0.5,
+            depthWrite: false,
+            roughness: 1.0,
+            metalness: 0.0,
+        });
+        const cw = Math.max(24, seg.w - 14),
+            ch = Math.max(16, seg.h - 10);
+        clouds = new THREE.Mesh(getSphereGeometry(spec.r * 1.005, cw, ch), cloudMat);
+        clouds.position.set(0, 0, 0);
+        try {
+            clouds.layers.enable(1);
+        } catch {}
+        tiltGroup.add(clouds);
+        cloudRotSpeed = 2.4;
     }
     // Elliptical orbit line
     const orbitLine = buildOrbitLine(spec);
@@ -1934,40 +2412,29 @@ planetSpecs.forEach((spec, i) => {
     const planetObj = { group: g, tiltGroup, mesh, clouds, cloudRotSpeed, spec, M0, orbitLine, spinRate };
     planets.push(planetObj);
 
+    // Default outer planets to hidden for performance
+    const outerNames = ["Jupiter", "Saturn", "Uranus", "Neptune"];
+    if (outerNames.includes(spec.name)) {
+        g.visible = false;
+        if (orbitLine) orbitLine.visible = false;
+    }
+
     if (spec.name === "Earth") {
         loadRealEarthTextures(planetObj);
     } else if (spec.name === "Venus") {
         loadRealVenusTextures(planetObj);
     } else if (spec.name === "Mercury") {
         loadRealMercuryTextures(planetObj);
-        // Add a gentle ambient fill that only lights Mercury (layer 1)
-        try {
-            const existing = scene.getObjectByName?.("__MercuryFillLight");
-            if (!existing) {
-                const mercuryFill = new THREE.AmbientLight(0xffffff, 0.35);
-                mercuryFill.name = "__MercuryFillLight";
-                // Restrict this light to layer 1 only so it only affects Mercury (mesh has layer 1 enabled)
-                mercuryFill.layers.set(1);
-                scene.add(mercuryFill);
-            }
-            // Ensure Mercury receives layer-1 lighting
-            try {
-                mesh.layers.enable(1);
-            } catch (e) {}
-        } catch (e) {}
     } else if (spec.name === "Mars") {
         loadRealMarsTextures(planetObj);
-        // Add a gentle ambient fill that only lights Mars (layer 1)
-        try {
-            const existing = scene.getObjectByName?.("__MarsFillLight");
-            if (!existing) {
-                const marsFill = new THREE.AmbientLight(0xffffff, 0.35);
-                marsFill.name = "__MarsFillLight";
-                // Restrict this light to layer 1 only so it only affects Mars (mesh has layer 1 enabled)
-                marsFill.layers.set(1);
-                scene.add(marsFill);
-            }
-        } catch (e) {}
+    } else if (spec.name === "Jupiter") {
+        planetObj.loadTextures = () => loadRealJupiterTextures(planetObj);
+    } else if (spec.name === "Saturn") {
+        planetObj.loadTextures = () => loadRealSaturnTextures(planetObj);
+    } else if (spec.name === "Uranus") {
+        planetObj.loadTextures = () => loadRealUranusTextures(planetObj);
+    } else if (spec.name === "Neptune") {
+        planetObj.loadTextures = () => loadRealNeptuneTextures(planetObj);
     }
 });
 
@@ -2856,6 +3323,33 @@ const navButtons = {
     contact: document.getElementById("nav-contact"),
     planets: document.getElementById("nav-planets"),
 };
+
+// Toggle Outer System
+const btnToggleOuter = document.getElementById("nav-toggle-outer");
+if (btnToggleOuter) {
+    let outerVisible = false;
+    btnToggleOuter.addEventListener("click", () => {
+        outerVisible = !outerVisible;
+        // Toggle Asteroid Belt
+        if (asteroidBelt) asteroidBelt.visible = outerVisible;
+        
+        // Toggle Outer Planets
+        const outerNames = ["Jupiter", "Saturn", "Uranus", "Neptune"];
+        planets.forEach(p => {
+            if (outerNames.includes(p.spec.name)) {
+                if (p.group) p.group.visible = outerVisible;
+                if (p.orbitLine) p.orbitLine.visible = outerVisible;
+                
+                // Load textures on demand
+                if (outerVisible && p.loadTextures && !p.texturesLoaded) {
+                    p.loadTextures();
+                    p.texturesLoaded = true;
+                }
+            }
+        });
+    });
+}
+
 let activeSection = "planets";
 function setActive(section) {
     activeSection = section;
@@ -2949,7 +3443,7 @@ try {
 } catch (e) {}
 
 // Initialize intro text
-updateIntroSprite("Benedict Leung's Galaxy", "Computer Science, MSc");
+updateIntroSprite("Benedict Leung", "Computer Science, MSc");
 
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2(2, 2);
@@ -3258,6 +3752,10 @@ function render(now) {
     }
     
     PlanetPatterns.update();
+
+    if (asteroidBelt) {
+        asteroidBelt.rotation.y += 0.002 * dt;
+    }
 
     planetSpecs.forEach((spec, idx) => {
         const p = planets[idx];
