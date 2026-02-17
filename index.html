@@ -4,73 +4,288 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Benedict Leung</title>
+    <title>Benedict Leung | HCI Researcher</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@200..700&family=Raleway:wght@600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="static/app.css" />
-
-    <!-- import map resolves bare "three" specifiers used by examples/jsm modules -->
+    <!-- Updated Fonts to match Mission Control aesthetic -->
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+    
+    <!-- Three.js Import Map -->
     <script type="importmap">
-            {
-                "imports": {
-                    "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
-                    "three/": "https://cdn.jsdelivr.net/npm/three@0.158.0/"
-                }
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+                "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
             }
-        </script>
+        }
+    </script>
+
+    <link rel="stylesheet" href="static/app.css" />
 </head>
 
-<body class="is-loading">
-    <div id="preloader" aria-live="polite" aria-busy="true">
-        <!-- Keep id preloader-ring-fg for JS hook; now the SVG root hosts the CSS var --p -->
-        <svg id="preloader-ring-fg" class="preloader-moon" viewBox="0 0 120 120" role="progressbar" aria-label="Loading"
-            aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-            <defs>
-                <!-- slight blur to soften the terminator edge -->
-                <filter id="moon-soften" x="-20%" y="-20%" width="140%" height="140%">
-                    <feGaussianBlur in="SourceGraphic" stdDeviation="0.8" />
-                </filter>
-                <mask id="moonMask">
-                    <!-- Black = hidden, White = visible -->
-                    <rect width="120" height="120" fill="black" />
-                    <circle cx="60" cy="60" r="54" fill="white" />
-                    <circle class="shadow" cx="60" cy="60" r="54" fill="black" filter="url(#moon-soften)" />
-                </mask>
-            </defs>
-            <!-- illuminated disc clipped by moving shadow to simulate phases -->
-            <g mask="url(#moonMask)">
-                <circle class="lit" cx="60" cy="60" r="54" />
-                <!-- simple cartoon craters (spread out) -->
-                <circle class="crater" cx="42" cy="38" r="10" />
-                <circle class="crater" cx="73" cy="64" r="6.2" />
-                <circle class="crater" cx="50" cy="95" r="8" />
-                <circle class="crater" cx="86" cy="82" r="5.5" />
-                <circle class="crater" cx="102" cy="43" r="5.8" />
-                <circle class="crater" cx="34" cy="78" r="5.2" />
-                <circle class="crater" cx="78" cy="28" r="12.4" />
-            </g>
-            <circle class="rim" cx="60" cy="60" r="54" />
-        </svg>
-        <div id="preloader-text">0%</div>
+<body>
+    <div id="preloader">
+        <div class="loader-text">INITIALIZING SYSTEM</div>
+        <div class="loader-bar"><div class="loader-progress" id="progress-bar"></div></div>
     </div>
-    <nav>
-        <button id="nav-planets">Home</button>
-        <button id="nav-about">About Me</button>
-        <button id="nav-projects">Projects</button>
-        <button id="nav-publications">Publications</button>
-        <button id="nav-contact">Contact</button>
-    </nav>
-    <button id="nav-toggle-outer" class="top-right-btn">Toggle Outer System</button>
-
-    <!-- Intro text moved to 3D scene -->
 
     <canvas id="bg"></canvas>
+    
+    <!-- The Horizon Flare Effect -->
+    <div class="planet-horizon" id="planet-horizon"></div>
 
-    <!-- GSAP (UMD global) loaded before module so module can use global `gsap` if needed -->
+    <nav>
+        <div class="logo">
+            <div class="logo-dot"></div>
+            BENEDICT LEUNG
+        </div>
+        <div class="nav-links">
+            <a href="#hero">Home</a>
+            <a href="#about">About</a>
+            <a href="#projects">Projects</a>
+            <a href="#publications">Research</a>
+            <a href="#contact">Contact</a>
+        </div>
+    </nav>
+
+    <main>
+        <!-- SECTION 1: HERO (Overview / Sun) -->
+        <section id="hero" class="active" data-planet="overview">
+            <!-- Decorative Tech Elements -->
+            <div class="deco-line-vertical"></div>
+            <div class="sys-status">SYSTEM STATUS: NOMINAL // ORBIT STABLE</div>
+
+            <div class="content-block">
+                <div class="section-label">
+                    <div class="section-line"></div>
+                    <span class="section-text">IDENTIFICATION</span>
+                </div>
+                <h1>Human-Computer Interaction<br><span class="highlight">Researcher</span></h1>
+                <p>
+                    MSc, Computer Science 
+                </p>
+                <div style="margin-top: 32px;">
+                    <a href="#projects" class="btn-primary" style="margin-right: 16px;">View Work</a>
+                </div>
+            </div>
+
+            <!-- HUD Stats -->
+            <div class="hud-footer">
+                <div class="hud-item">
+                    AVAILABILITY
+                    <span>99.9%</span>
+                </div>
+                <div class="hud-item">
+                    PROJECTS
+                    <span>12+ SHIPPED</span>
+                </div>
+                <div class="hud-item">
+                    LOCATION
+                    <span>ONTARIO, CA</span>
+                </div>
+            </div>
+
+            <div class="scroll-indicator">
+                <div class="desktop-indicator">
+                    <div class="mouse-icon">
+                        <div class="wheel"></div>
+                    </div>
+                    <div class="indicator-text">SCROLL TO EXPLORE</div>
+                </div>
+                <div class="mobile-indicator">
+                    <!-- Simple hand/swipe icon SVG -->
+                    <svg class="hand-icon" width="24" height="24" viewBox="0 0 10 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <g xmlns="http://www.w3.org/2000/svg" transform="matrix(0.02139,0,0,0.02139,-4.58455,-5.768257)">
+                            <path d="M512.11,364.078C512.11,311.924 469.87,269.666 417.734,269.666C365.562,269.666 323.322,311.924 323.322,364.078C323.322,399.464 342.809,430.26 371.626,446.422L373.587,383.81C373.587,358.167 394.397,337.376 420.058,337.376L422.663,337.376C442.867,337.376 459.257,353.749 459.257,373.954L459.257,448.763C490.547,433.376 512.11,401.276 512.11,364.078Z" style="fill:rgba(255, 255, 255, 0.4);fill-rule:nonzero;"/>
+                            <path d="M459.258,373.954C459.258,353.749 442.869,337.376 422.664,337.376L420.059,337.376C394.398,337.376 373.588,358.167 373.588,383.81L371.627,446.422L367.304,584.436C366.317,588.684 365.711,684.625 365.711,684.625C357.632,676.373 348.608,666.932 340.471,657.869C321.531,636.738 286.75,622.501 263.619,619.88C251.439,618.464 242.11,620.14 235.955,624.806C233.934,626.316 232.028,627.999 230.157,629.811C218.262,641.573 209.235,660.57 217.563,674.484C221.182,680.563 227.382,684.587 233.934,688.836C242.661,694.5 257.367,700.619 268.358,714.687C286.898,738.326 329.686,791.197 355.992,819.424C361.43,822.825 373.022,834.381 378.496,837.308C395.094,847.902 408.672,857.891 413.375,863.307C417.057,867.519 438.772,878.64 438.772,878.64C456.332,889.779 488.339,900.164 525.253,900.164C562.167,900.164 595.608,902.376 620.365,880.603L621.744,880.603L622.346,878.945C647.571,855.887 663.188,823.938 663.188,788.591L663.188,619.65C663.188,611.344 661.378,583.604 638.036,575.258C626.84,571.276 616.228,572.786 607.204,576.674L605.068,576.786L604.409,576.828C600.366,561.586 590.247,551.73 575.253,549.125C557.127,545.99 544.59,551.41 537.055,556.866C529.538,540.74 514.472,532.337 494.134,534.038C478.84,535.342 467.511,542.841 459.259,552.73L459.259,373.954L459.258,373.954Z" style="stroke:rgba(255, 255, 255, 0.4);stroke-width:30;"/>
+                        </g>
+                    </svg>
+                    <div class="indicator-text">SWIPE TO EXPLORE</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 2: ABOUT (Earth) -->
+        <section id="about" class="align-right" data-planet="earth">
+            <div class="content-block" style="max-width: 600px;">
+                <div class="section-label">
+                    <div class="section-line"></div>
+                    <span class="section-text">BIOGRAPHY</span>
+                </div>
+                <h2>About Me</h2>
+                <br>
+                <p>
+                    Hi! My name is Benedict, but you can call me Ben for short. I am a Master computer science student at Ontario Tech University. My research area is human-computer interaction, focusing on novel interactions with hardware like pen-based devices, eye-tracking, and brain computer interfaces. Recently, my research has been creating interactions with Large Language Models.<br><br>
+    When I was young, around third grade, I was passionate about being an inventor, in the sense that I wanted to create something never made before and use it to help people who couldn't do a specific task. But that morphed when I was introduced to computer programming. I was amused by how you can put your "heart and soul" into a program and do exactly what you envisioned, meaning your legacy can be imprinted into your programs for generations. My desired legacy is to give to people worldwide, like aiding the blind or advancing neural interfaces. These "dreams" may seem distant, but someone must take the first step, even if no one is willing.
+                </p>
+                <a href="static/pdf/Resume.pdf" target="_blank" class="btn-primary">View CV</a>
+            </div>
+        </section>
+
+        <!-- SECTION 3: PROJECTS (Grid) -->
+        <section id="projects" data-planet="mars">
+            <div style="width: 100%;">
+                <div class="section-label">
+                    <div class="section-line"></div>
+                    <span class="section-text">SELECTED OPERATIONS</span>
+                </div>
+                <h2 style="margin-top: 16px;">Projects</h2>
+                <a href="https://github.com/Benedict-Leung?tab=repositories" target="_blank" style="color: var(--muted); font-size: 0.8rem; margin-bottom: 24px; display: inline-block; pointer-events: all;">VIEW ALL</a>
+                <!-- Grid Container with counters -->
+                <div class="card-grid">
+                    <a href="https://github.com/Benedict-Leung/Battleship" target="_blank" class="glass-card">
+                        <div class="card-img-container">
+                            <img src="static/img/Battleship.png" alt="Battleship Game" loading="lazy">
+                        </div>
+                        <div class="card-content">
+                            <div class="card-title">Battleship Network</div>
+                            <div class="card-desc">Real-time multiplayer game using JavaFX and Sockets.</div>
+                            <div class="card-meta">JAVAFX // SOCKETS</div>
+                        </div>
+                    </a>
+                    <a href="https://github.com/Benedict-Leung/GameBlog" target="_blank" class="glass-card">
+                        <div class="card-img-container">
+                            <img src="static/img/GameBlog.png" alt="GameBlog" loading="lazy">
+                        </div>
+                        <div class="card-content">
+                            <div class="card-title">GameBlog</div>
+                            <div class="card-desc">Browser-based tank shooter built with Three.js featuring custom physics and shaders.</div>
+                            <div class="card-meta">THREE.JS // SOCKET.IO // MONGODB</div>
+                        </div>
+                    </a>
+                    <a href="https://github.com/Benedict-Leung/Spam-Detection" target="_blank" class="glass-card">
+                        <div class="card-img-container">
+                            <img src="static/img/SpamDetection.png" alt="Spam Detection" loading="lazy">
+                        </div>
+                        <div class="card-content">
+                            <div class="card-title">Spam Detection</div>
+                            <div class="card-desc">Email spam classification using heuristic analysis.</div>
+                            <div class="card-meta">JAVAFX</div>
+                        </div>
+                    </a>
+                    <a href="https://github.com/Benedict-Leung/Instagram-Mock" target="_blank" class="glass-card">
+                        <div class="card-img-container">
+                            <img src="static/img/Instagram.png" alt="Instagram Mock" loading="lazy">
+                        </div>
+                        <div class="card-content">
+                            <div class="card-title">Instagram Mock</div>
+                            <div class="card-desc">Mocks the basic features of Instagram.</div>
+                            <div class="card-meta">PYTHON // FLASK</div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 4: PUBLICATIONS (Grid style for consistency) -->
+        <section id="publications" data-planet="jupiter">
+            <div style="width: 100%;">
+                <div class="section-label">
+                    <div class="section-line"></div>
+                    <span class="section-text">RESEARCH LOGS</span>
+                </div>
+                <h2 style="margin-top: 16px;">Publications</h2>
+                <a href="https://scholar.google.com/citations?hl=en&user=ofhVl3wAAAAJ" target="_blank" style="color: var(--muted); font-size: 0.8rem; margin-bottom: 24px; display: inline-block; pointer-events: all;">VIEW ALL</a>
+                <div class="card-grid">
+                    <div class="glass-card">
+                        <div class="card-img-container">
+                            <img src="static/img/AnnotateGPT.png" alt="AnnotateGPT" loading="lazy">
+                        </div>
+                        <div class="card-content">
+                            <div class="card-title">AnnotateGPT</div>
+                            <div class="card-desc">AnnotateGPT: Designing Human-AI Collaboration in Pen-Based Document Annotation</div>
+                            
+                            <div class="card-actions">
+                                <a href="static/pdf/AnnotateGPT.pdf" target="_blank" class="btn-small">PDF</a>
+                                <a href="https://doi.org/10.1145/3772318.3790867" target="_blank" class="btn-small">Paper</a>
+                                <a href="https://github.com/vialab/AnnotateGPT" target="_blank" class="btn-small">Code</a>
+                                <a href="https://vialab.github.io/AnnotateGPT/" target="_blank" class="btn-small">Website</a>
+                            </div>
+                            <div class="card-meta" style="color: var(--horizon-gold);">CHI '26</div>
+                        </div>
+                    </div>
+                    <div class="glass-card">
+                        <div class="card-img-container">
+                            <img src="static/img/SwipeSense.png" alt="SwipeSense" loading="lazy" style="object-position: 50% 20%;">
+                        </div>
+                        <div class="card-content">
+                            <div class="card-title">SwipeSense</div>
+                            <div class="card-desc">Exploring the Feasibility of Back-of-Device Swipe Interaction Using Built-In IMU Sensors</div>
+
+                            
+                            <div class="card-actions">
+                                <a href="static/pdf/SwipeSense.pdf" target="_blank" class="btn-small">PDF</a>
+                                <a href="https://dl.acm.org/doi/10.1145/3743734" target="_blank" class="btn-small">Paper</a>
+                            </div>
+                            <div class="card-meta" style="color: var(--horizon-gold);">MOBILEHCI '25</div>
+                        </div>
+                    </div>
+                    <div class="glass-card">
+                        <div class="card-img-container">
+                            <img src="static/img/GazeQuestGPT.png" alt="GazeQ-GPT" loading="lazy" style="object-position: 50% 10%;">
+                        </div>
+                        <div class="card-content">
+                            <div class="card-title">GazeQ-GPT</div>
+                            <div class="card-desc">Gaze-Driven Question Generation for Personalized Learning from Short Educational Videos</div>
+
+                            <div class="card-actions">
+                                <a href="static/pdf/GazeQ.pdf" target="_blank" class="btn-small">PDF</a>
+                                <a href="https://github.com/vialab/gazeq-gpt" target="_blank" class="btn-small">Code</a>
+                                <a href="https://www.youtube.com/watch?v=LkhKZQgVJYk" target="_blank" class="btn-small">Video</a>
+                            </div>
+                            <div class="card-meta" style="color: var(--horizon-gold);">GRAPHICS INTERFACE '25</div>
+                        </div>
+                    </div>
+                    <div class="glass-card">
+                        <div class="card-img-container">
+                            <img src="static/img/NeuroSight.png" alt="NeuroSight" loading="lazy">
+                        </div>
+                        <div class="card-content">
+                            <div class="card-title">NeuroSight</div>
+                            <div class="card-desc">Combining Eye-Tracking and Brain-Computer Interfaces for Context-Aware Hands-Free Camera Interaction</div>
+                            
+                            <div class="card-actions">
+                                <a href="static/pdf/NeuroSight.pdf" target="_blank" class="btn-small">PDF</a>
+                                <a href="https://dl.acm.org/doi/10.1145/3672539.3686312" target="_blank" class="btn-small">Paper</a>
+                                <a href="static/pdf/NeuroSight Poster.pdf" target="_blank" class="btn-small">Poster</a>
+                            </div>
+                            <div class="card-meta" style="color: var(--horizon-gold);">UIST ADJUNCT '24</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 5: CONTACT -->
+        <section id="contact" class="align-left" data-planet="saturn">
+            <div class="content-block">
+                <div class="section-label">
+                    <div class="section-line"></div>
+                    <span class="section-text">TRANSMISSION</span>
+                </div>
+                <h2>Establish Connection</h2>
+                <br>
+                <p>
+                    Currently looking for new opportunities in HCI research.
+                </p>
+                <div style="margin-top: 40px; display: flex; flex-direction: column; gap: 20px;">
+                    <!-- <a href="mailto:sam.ben.leung@gmail.com" style="color:#fff; text-decoration:none; font-family:var(--font-heading); font-size: 1.5rem;">sam.ben.leung@gmail.com</a> -->
+                    <div style="display: flex; gap: 24px; font-family: var(--font-mono); font-size: 0.8rem;">
+                        <a href="mailto:sam.ben.leung@gmail.com" style="color:var(--muted); text-decoration:none;">EMAIL</a>
+                        <a href="https://www.linkedin.com/in/ben--leung" target="_blank" style="color:var(--muted); text-decoration: none;">LINKEDIN</a>
+                        <a href="https://github.com/Benedict-Leung" target="_blank" style="color:var(--muted); text-decoration: none;">GITHUB</a>
+                        <a href="https://scholar.google.com/citations?hl=en&user=ofhVl3wAAAAJ" target="_blank" style="color:var(--muted); text-decoration: none;">GOOGLE SCHOLAR</a>
+                        <a href="https://orcid.org/0009-0003-6754-9874" target="_blank" style="color:var(--muted); text-decoration: none;">ORCID</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- GSAP for animations -->
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.2/dist/gsap.min.js"></script>
-    <!-- Module entry: imports resolved via importmap above -->
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.2/dist/ScrollTrigger.min.js"></script>
+
     <script type="module" src="static/app.js"></script>
 </body>
-
 </html>
