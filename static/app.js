@@ -1,6 +1,24 @@
 import * as THREE from "three";
 
 // --- 1. UTILITIES FOR PROCEDURAL TEXTURES (Sun) ---
+function generateGlowTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const context = canvas.getContext('2d');
+    const gradient = context.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    gradient.addColorStop(0.2, 'rgba(255, 200, 100, 0.6)');
+    gradient.addColorStop(0.5, 'rgba(100, 50, 0, 0.2)');
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 128, 128);
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    return texture;
+}
+
 function toRGBA(n, a = 255) {
     return [(n >> 16) & 255, (n >> 8) & 255, n & 255, a];
 }
@@ -295,7 +313,7 @@ const views = {
     },
     earth: {
         pos: new THREE.Vector3(185, 5, 35), // Camera right of planet
-        lookAt: new THREE.Vector3(200, 0, 10) // Look at Earth center
+        lookAt: new THREE.Vector3(200, 0, 15) // Look at Earth center
     },
     mars: {
         pos: new THREE.Vector3(375, 5, 20), // Camera left of planet
@@ -415,6 +433,18 @@ function initSystem() {
     });
     sun = new THREE.Mesh(sunGeo, sunMat);
 
+    const glowTex = generateGlowTexture();
+    const spriteMat = new THREE.SpriteMaterial({ 
+        map: glowTex, 
+        color: 0xffaa00, 
+        transparent: true, 
+        blending: THREE.AdditiveBlending,
+        opacity: 1.0
+    });
+    const sprite = new THREE.Sprite( spriteMat );
+    sprite.scale.set(80, 80, 1.0); /* Increased glow radius */
+
+    sun.add(sprite);
     scene.add(sun);
 
     // Point light for sharp shadows and planet illumination
