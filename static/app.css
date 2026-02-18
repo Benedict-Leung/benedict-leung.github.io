@@ -61,9 +61,9 @@ body {
     pointer-events: none;
 
     background: radial-gradient(
-        120% 120% at 50% -30%,
-        rgba(0, 0, 0, 0) 40%,
-        rgba(42, 42, 53, 0.3) 60%,
+        ellipse 200% 150% at 50% -50%,
+        rgba(0,0,0,0) 40%,
+        rgba(42,42,53,0.3) 60%,
         var(--horizon-red) 65%,
         var(--horizon-gold) 68%,
         transparent 72%

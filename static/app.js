@@ -440,7 +440,22 @@ function animate() {
 }
 
 // Handle Resize
+let windowWidth = window.innerWidth;
+let windowHeight = window.innerHeight;
+        
 window.addEventListener('resize', () => {
+    if (window.innerWidth !== windowWidth || window.innerHeight !== windowHeight) {
+        windowWidth = window.innerWidth;
+        windowHeight = window.innerHeight;
+        
+        camera.aspect = windowWidth / windowHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(windowWidth, windowHeight);
+    }
+});
+
+window.addEventListener('orientationchange', () => {
+    windowWidth = window.innerWidth;
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
