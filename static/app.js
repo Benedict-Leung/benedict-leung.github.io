@@ -1,5 +1,25 @@
 import * as THREE from "three";
 
+const menuBtn = document.getElementById('menu-btn');
+const mobileMenu = document.getElementById('mobile-menu');
+const mobileLinks = document.querySelectorAll('.mobile-link');
+
+if(menuBtn && mobileMenu) {
+    menuBtn.addEventListener('click', () => {
+        mobileMenu.classList.toggle('open');
+        // Animate hamburger to X
+        menuBtn.classList.toggle('active');
+    });
+
+    // Close menu when link is clicked
+    mobileLinks.forEach(link => {
+        link.addEventListener('click', () => {
+            mobileMenu.classList.remove('open');
+            menuBtn.classList.remove('active');
+        });
+    });
+}
+
 // --- 1. UTILITIES FOR PROCEDURAL TEXTURES (Sun) ---
 function generateGlowTexture() {
     const canvas = document.createElement('canvas');
@@ -395,8 +415,16 @@ function animate() {
 
     // 3. Horizon Parallax (Moved to Loop for smoothness)
     if (planetHorizon) {
-        const scrolled = Math.min(window.scrollY, 800);
-        planetHorizon.style.transform = `translateY(${scrolled * 0.15}px) scale(${1 + scrolled * 0.0005})`;
+        const maxTranslateY = window.innerHeight * 0.6;
+        const maxScroll = maxTranslateY / 0.15;
+
+        const rawScroll = Math.min(window.scrollY, maxScroll);
+        const t = rawScroll / maxScroll;
+        const eased = 1 - Math.pow(1 - t, 20);
+
+        const translateY = eased * maxTranslateY;
+
+        planetHorizon.style.transform = `translateY(${translateY}px) scale(${1 + eased * 0.35})`;
     }
 
     // 4. Smooth Camera Interpolation (Damping)
@@ -448,7 +476,7 @@ function initSystem() {
     scene.add(sun);
 
     // Point light for sharp shadows and planet illumination
-    const sunLight = new THREE.PointLight(0xffffff, 2.5, 0, 0);
+    const sunLight = new THREE.PointLight(0xffffff, 1.0, 0, 0);
     sun.add(sunLight);
     // Ambient light INCREASED to light up dark sides
     scene.add(new THREE.AmbientLight(0x404040, 2.0));
