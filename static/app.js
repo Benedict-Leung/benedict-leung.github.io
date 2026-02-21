@@ -36,6 +36,10 @@ function generateGlowTexture() {
     
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
+    texture.generateMipmaps = false;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
     return texture;
 }
 
@@ -137,10 +141,11 @@ function generateSunTexture(w, h) {
 }
 
 // --- 2. SETUP ---
+const EXTRA_HEIGHT = 100; // pixels beyond viewport
 const canvas = document.getElementById("bg");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setSize(window.innerWidth, window.innerHeight + EXTRA_HEIGHT);
 // Using ACESFilmicToneMapping to handle bright highlights on planets nicely
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.2;
@@ -150,11 +155,16 @@ const scene = new THREE.Scene();
 // Faint fog to blend distant planets into darkness
 scene.fog = new THREE.FogExp2(0x000000, 0.0008);
 
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 50000);
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / (window.innerHeight + EXTRA_HEIGHT), 0.1, 50000);
 
-// Initial Camera Position (Overview)
-camera.position.set(0, 30, 120);
-camera.lookAt(0, 0, 0);
+// --- Intro Animation State ---
+let isIntroPlaying = true;
+let introLookAt = new THREE.Vector3(0, 55, 0); 
+
+// Cinematic Initial Camera Position
+// By starting high and looking straight ahead, the sun (at 0,0,0) starts at the bottom of the screen.
+camera.position.set(0, 55, 45);
+camera.lookAt(introLookAt);
 
 // --- 3. ASSETS & TEXTURES ---
 const loadingManager = new THREE.LoadingManager();
@@ -167,13 +177,96 @@ loadingManager.onProgress = (url, loaded, total) => {
 };
 
 loadingManager.onLoad = () => {
-    // Initialize scroll logic immediately so interactions are responsive
-    initScroll();
+    // Prevent CSS transitions from fighting GSAP during initial load
+    document.querySelectorAll('#hero .content-block, .planet-horizon').forEach(el => {
+        el.style.transition = 'none';
+    });
+
+    // Setup initial hidden states for UI components
+    gsap.set("nav", { y: -30, opacity: 0 });
+    gsap.set("#hero .content-block", { y: 30, opacity: 0 });
+    gsap.set(".deco-line-vertical", { scaleY: 0, opacity: 0, transformOrigin: "top" });
+    gsap.set(".sys-status", { x: 20, opacity: 0 });
+    gsap.set(".hud-footer", { y: 20, opacity: 0 });
+    gsap.set(".scroll-indicator", { opacity: 0 });
+    gsap.set("#planet-horizon", { opacity: 0, scale: 0.8 });
 
     if (preloader) {
         // Fade out preloader
         preloader.classList.add('loaded');
     }
+
+    // Lock scrolling until cinematic is done
+    // Not body html to prevent weird mobile issues where scroll still happens on some browsers
+    document.documentElement.style.overflow = 'hidden';
+
+    // Cinematic GSAP Timeline
+     const tl = gsap.timeline({
+        onComplete: () => {
+            isIntroPlaying = false;
+            document.documentElement.style.overflow = ''; // Restore scroll
+            
+            // Clean up inline transitions so normal CSS styling takes back over
+            document.querySelectorAll('#hero .content-block, .planet-horizon').forEach(el => {
+                el.style.transition = '';
+                el.style.transform = '';
+            });
+            gsap.set("#hero .content-block", { clearProps: "all" });
+
+            // Initialize intersection observers to track normal scroll
+            initScroll();
+        }
+    });
+
+    // --- PHASE 1: THE RISE (0s to 2s) ---
+    // Camera literally moves down on the Y axis, causing the sun to physically rise into the center of the frame
+    tl.to(starUniforms.introProgress, {
+        value: 1.0,
+        duration: 2.0,
+        ease: "power2.inOut"
+    }, 0)
+    
+    .to(camera.position, {
+        y: 0,
+        duration: 2.0,
+        ease: "sine.inOut",
+        onUpdate: () => {
+            introLookAt.y = camera.position.y;
+            camera.lookAt(introLookAt);
+        }
+    }, 2)
+
+    // --- PHASE 2: THE PULLBACK (2s to 5s) ---
+    // Smoothly backs out into the system overview position
+    .to(camera.position, {
+        x: views.overview.pos.x,
+        y: views.overview.pos.y,
+        z: views.overview.pos.z,
+        duration: 3.0,
+        ease: "sine.inOut", 
+        onUpdate: () => {
+            camera.lookAt(introLookAt);
+            camPos.copy(camera.position); 
+            camLook.copy(introLookAt);
+        }
+    }, 4.0)
+    .to(introLookAt, {
+        x: views.overview.lookAt.x,
+        y: views.overview.lookAt.y,
+        z: views.overview.lookAt.z,
+        duration: 3.0,
+        ease: "sine.inOut"
+    }, 4.0)
+
+    // --- SYSTEM ONLINE (UI Cascade) ---
+    // UI elements fade in elegantly as the camera settles at the end of the 5s window
+    .to("#planet-horizon", { opacity: 0.6, scale: 1, duration: 1.5, ease: "power1.out" }, 5.0)
+    .to("nav", { y: 0, opacity: 1, duration: 1.0, ease: "power1.out" }, 5.3)
+    .to("#hero .content-block", { y: 0, opacity: 1, duration: 1.0, ease: "power1.out" }, 5.5)
+    .to(".deco-line-vertical", { scaleY: 1, opacity: 1, duration: 0.8, ease: "power1.out" }, 5.7)
+    .to(".sys-status", { x: 0, opacity: 1, duration: 0.8, ease: "power1.out" }, 5.9)
+    .to(".hud-footer", { y: 0, opacity: 1, duration: 0.8, ease: "power1.out" }, 6.1)
+    .to(".scroll-indicator", { opacity: 0.5, duration: 1.0, ease: "power1.out" }, 6.3);
 };
 
 const textureLoader = new THREE.TextureLoader(loadingManager);
@@ -191,6 +284,10 @@ const loadTex = (path, srgb = true) => {
 const planets = {};
 let sun;
 let starField;
+let starUniforms = { 
+    time: { value: 0 },
+    introProgress: { value: 0.0 }
+};
 
 // --- PLANET CREATION LOGIC ---
 
@@ -349,12 +446,11 @@ const views = {
     }
 };
 
-let currentView = views.overview;
 let targetView = views.overview;
 
-// Smooth camera movement vars
-const camPos = new THREE.Vector3().copy(views.overview.pos);
-const camLook = new THREE.Vector3().copy(views.overview.lookAt);
+// Smooth camera movement vars synced to intro lookAt initially
+const camPos = new THREE.Vector3().copy(camera.position);
+const camLook = new THREE.Vector3().copy(introLookAt);
 
 function initScroll() {
     // Using IntersectionObserver to detect which section is active
@@ -412,9 +508,10 @@ function animate() {
 
     // 2. Rotate Starfield slowly
     if (starField) starField.rotation.y -= 0.02 * dt;
+    starUniforms.time.value += dt;
 
-    // 3. Horizon Parallax (Moved to Loop for smoothness)
-    if (planetHorizon) {
+    // 3. Horizon Parallax (Handled exclusively here if cinematic is finished)
+    if (planetHorizon && !isIntroPlaying) {
         const maxTranslateY = window.innerHeight * 0.6;
         const maxScroll = maxTranslateY / 0.15;
 
@@ -427,38 +524,67 @@ function animate() {
         planetHorizon.style.transform = `translateY(${translateY}px) scale(${1 + eased * 0.35})`;
     }
 
-    // 4. Smooth Camera Interpolation (Damping)
-    // Use Linear Interpolation (Lerp) to move current pos towards target pos
-    const damp = 2.0 * dt;
-    camPos.lerp(targetView.pos, damp);
-    camLook.lerp(targetView.lookAt, damp);
+    // 4. Smooth Camera Interpolation (Only runs once cinematic ends)
+    if (!isIntroPlaying) {
+        // Use Linear Interpolation (Lerp) to move current pos towards target pos
+        const damp = 2.0 * dt;
+        camPos.lerp(targetView.pos, damp);
+        camLook.lerp(targetView.lookAt, damp);
 
-    camera.position.copy(camPos);
-    camera.lookAt(camLook);
+        camera.position.copy(camPos);
+        camera.lookAt(camLook);
+    }
 
     renderer.render(scene, camera);
+}
+
+function setCanvasHeight() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight + EXTRA_HEIGHT;
+
+    camera.aspect = window.innerWidth / canvas.height;
+    camera.updateProjectionMatrix();
+    renderer.setSize(canvas.width, canvas.height);
 }
 
 // Handle Resize
 let windowWidth = window.innerWidth;
 let windowHeight = window.innerHeight;
-        
+
+let heightUnlocked = false;
+
 window.addEventListener('resize', () => {
-    if (window.innerWidth !== windowWidth || window.innerHeight !== windowHeight) {
-        windowWidth = window.innerWidth;
-        windowHeight = window.innerHeight;
-        
-        camera.aspect = windowWidth / windowHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(windowWidth, windowHeight);
+    const newWidth = window.innerWidth;
+    const newHeight = window.innerHeight;
+
+    const heightDelta = Math.abs(newHeight - windowHeight);
+
+    // Width change → always resize
+    if (newWidth !== windowWidth) {
+        windowWidth = newWidth;
+        windowHeight = newHeight;
+        setCanvasHeight();
+        heightUnlocked = true;
+        return;
     }
+
+    // Height logic
+    if (!heightUnlocked) {
+        // Ignore until threshold exceeded
+        if (heightDelta < EXTRA_HEIGHT) return;
+        heightUnlocked = true;
+    }
+
+    // Once unlocked → always resize
+    windowHeight = newHeight;
+    setCanvasHeight();
 });
 
 window.addEventListener('orientationchange', () => {
     windowWidth = window.innerWidth;
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    windowHeight = window.innerHeight;
+    heightUnlocked = true;
+    setCanvasHeight();
 });
 
 // --- 7. SYSTEM INITIALIZATION ---
@@ -482,7 +608,9 @@ function initSystem() {
         color: 0xffaa00, 
         transparent: true, 
         blending: THREE.AdditiveBlending,
-        opacity: 1.0
+        opacity: 1,
+        depthWrite: false,
+        depthTest: true
     });
     const sprite = new THREE.Sprite( spriteMat );
     sprite.scale.set(80, 80, 1.0); /* Increased glow radius */
@@ -498,13 +626,92 @@ function initSystem() {
 
     // Starfield
     const starGeo = new THREE.BufferGeometry();
-    const starCount = 6000;
+    const starCount = 8000;
     const starPos = new Float32Array(starCount * 3);
-    for (let i = 0; i < starCount * 3; i++) {
-        starPos[i] = (Math.random() - 0.5) * 2000;
+    const starColors = new Float32Array(starCount * 3);
+    const starSizes = new Float32Array(starCount);
+    const starPhases = new Float32Array(starCount);
+
+    // Realistic color palette based on star temperatures
+    const colors = [
+        // new THREE.Color(0x9db4ff), // Hot blue
+        new THREE.Color(0xffffff), // White
+        new THREE.Color(0xffffff), // White
+        new THREE.Color(0xfff4e8), // Yellow-white
+        // new THREE.Color(0xffd2a1), // Orange
+        // new THREE.Color(0xffcc6f)  // Red/Orange
+    ];
+
+    for (let i = 0; i < starCount; i++) {
+        // Spherical distribution for better immersion
+        const r = 600 + Math.random() * 1400; // Radius between 600 and 2000
+        const theta = 2 * Math.PI * Math.random();
+        const phi = Math.acos(2 * Math.random() - 1);
+        
+        starPos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+        starPos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+        starPos[i * 3 + 2] = r * Math.cos(phi);
+
+        // Randomize color and brightness
+        const color = colors[Math.floor(Math.random() * colors.length)];
+        const brightness = 0.4 + Math.random() * 0.6;
+        starColors[i * 3] = color.r * brightness;
+        starColors[i * 3 + 1] = color.g * brightness;
+        starColors[i * 3 + 2] = color.b * brightness;
+
+        // Size & Twinkle Phase
+        starSizes[i] = Math.random() < 0.1 ? 10.0 + Math.random() * 10.0 : 5.0 + Math.random() * 10.0;
+        starPhases[i] = Math.random() * Math.PI * 2;
     }
+
     starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
-    const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.8, transparent: true, opacity: 0.8 });
+    starGeo.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
+    starGeo.setAttribute('size', new THREE.BufferAttribute(starSizes, 1));
+    starGeo.setAttribute('phase', new THREE.BufferAttribute(starPhases, 1));
+
+    const starMat = new THREE.ShaderMaterial({
+        uniforms: starUniforms,
+        vertexColors: true,
+        vertexShader: `
+            attribute float size;
+            attribute float phase;
+            varying vec3 vColor;
+            varying float vPhase;
+            void main() {
+                vColor = color;
+                vPhase = phase;
+                vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                gl_PointSize = size * (300.0 / -mvPosition.z);
+                gl_Position = projectionMatrix * mvPosition;
+            }
+        `,
+        fragmentShader: `
+            uniform float time;
+            uniform float introProgress;
+            varying vec3 vColor;
+            varying float vPhase;
+            void main() {
+                float dist = length(gl_PointCoord - vec2(0.5));
+                if (dist > 0.5) discard;
+                
+                // Soft glow edge
+                float alpha = smoothstep(0.5, 0.1, dist);
+                
+                // Twinkle
+                float twinkle = 0.5 + 0.5 * sin(time * 1.5 + vPhase);
+                
+                // Stagger the appearance of stars based on their random phase
+                float randOffset = fract(sin(vPhase * 123.456) * 789.123);
+                float introAlpha = smoothstep(randOffset * 0.8, randOffset * 0.8 + 0.2, introProgress);
+
+                gl_FragColor = vec4(vColor, alpha * twinkle * introAlpha);
+            }
+        `,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+
     starField = new THREE.Points(starGeo, starMat);
     scene.add(starField);
 
