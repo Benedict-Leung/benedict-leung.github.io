@@ -583,7 +583,6 @@ window.addEventListener('resize', () => {
 window.addEventListener('orientationchange', () => {
     windowWidth = window.innerWidth;
     windowHeight = window.innerHeight;
-    heightUnlocked = true;
     setCanvasHeight();
 });
 
