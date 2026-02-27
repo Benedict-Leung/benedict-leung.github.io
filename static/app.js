@@ -353,18 +353,95 @@ const createJupiter = () => {
     const grp = new THREE.Group();
     grp.position.set(600, 0, 0);
 
+    // ---- Jupiter sphere ----
     const geo = new THREE.SphereGeometry(18, 64, 64);
     const mat = new THREE.MeshStandardMaterial({
         map: loadTex(IMAGE_BASE + "Jupiter/realj2k.jpg"),
+        bumpMap: loadTex(IMAGE_BASE + "Jupiter/jupiter-hubble-2015-bump.jpg", false),
         roughness: 0.5,
         metalness: 0.0
     });
+
     const mesh = new THREE.Mesh(geo, mat);
     mesh.frustumCulled = false;
     grp.add(mesh);
 
+    // ---- Rings geometry ----
+    const innerRadius = 18 * 1.3;
+    const outerRadius = 18 * 3.2;
+    const ringGeo = new THREE.RingGeometry(innerRadius, outerRadius, 128);
+
+    // UV remap for strip texture
+    const pos = ringGeo.attributes.position;
+    const uv = ringGeo.attributes.uv;
+    const v3 = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+        v3.fromBufferAttribute(pos, i);
+        const len = v3.length();
+        const u = (len - innerRadius) / (outerRadius - innerRadius);
+        uv.setXY(i, u, 0.5);
+    }
+
+    // ---- Rings texture (async-safe) ----
+    const tex = loadTex(IMAGE_BASE + "Jupiter/JupiterRings.png");
+
+    const ringMat = new THREE.MeshStandardMaterial({
+        map: tex,
+        side: THREE.DoubleSide,
+        transparent: true,
+
+        // Visibility tuning
+        opacity: 1.0,
+        alphaTest: 0.0,
+        depthWrite: false,
+
+        roughness: 0.5,
+        metalness: 0.0,
+
+        // Subtle brightness lift
+        emissive: new THREE.Color(0x444444),
+        emissiveIntensity: 0.8
+    });
+
+    tex.onUpdate = () => {
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.generateMipmaps = false;
+        tex.minFilter = THREE.LinearFilter;
+        tex.magFilter = THREE.LinearFilter;
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.ClampToEdgeWrapping;
+        tex.premultiplyAlpha = false;
+
+        tex.needsUpdate = true;
+        ringMat.needsUpdate = true; // force shader recompilation
+    };
+
+    // ---- Rings mesh ----
+    const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+    ringMesh.rotation.x = -Math.PI / 2;
+    ringMesh.frustumCulled = false;
+    ringMesh.renderOrder = 1;
+
+    mesh.add(ringMesh);
+
+   const cloudGeo = new THREE.SphereGeometry(18.1, 64, 64);
+    const cloudMat = new THREE.MeshStandardMaterial({
+        map: loadTex(IMAGE_BASE + "Jupiter/jupiterclouds.png"),
+        transparent: true,
+        opacity: 0.8,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+        opacity: 0.55,
+        depthWrite: false,
+        roughness: 1.0,
+        metalness: 0.0,
+    });
+    const cloudMesh = new THREE.Mesh(cloudGeo, cloudMat);
+    cloudMesh.frustumCulled = false;
+    grp.add(cloudMesh);
+
     scene.add(grp);
-    planets['jupiter'] = { group: grp, mesh: mesh, r: 18 };
+    planets["jupiter"] = { group: grp, mesh: mesh, clouds: cloudMesh, r: 18 };
 };
 
 // Saturn: Base + Rings
@@ -437,7 +514,7 @@ const views = {
         lookAt: new THREE.Vector3(400, 0, 0)
     },
     jupiter: {
-        pos: new THREE.Vector3(605, 10, 45),
+        pos: new THREE.Vector3(605, 10, 65),
         lookAt: new THREE.Vector3(600, 0, 0)
     },
     saturn: {
@@ -503,7 +580,10 @@ function animate() {
         if (planets.earth.clouds) planets.earth.clouds.rotation.y += 0.07 * dt;
     }
     if (planets.mars) planets.mars.mesh.rotation.y += 0.04 * dt;
-    if (planets.jupiter) planets.jupiter.mesh.rotation.y += 0.02 * dt;
+    if (planets.jupiter) {
+        planets.jupiter.mesh.rotation.y += 0.02 * dt;
+        if (planets.jupiter.clouds) planets.jupiter.clouds.rotation.y += 0.03 * dt;
+    }
     if (planets.saturn) planets.saturn.mesh.rotation.y += 0.02 * dt;
 
     // 2. Rotate Starfield slowly
@@ -637,8 +717,8 @@ function initSystem() {
         new THREE.Color(0xffffff), // White
         new THREE.Color(0xffffff), // White
         new THREE.Color(0xfff4e8), // Yellow-white
-        // new THREE.Color(0xffd2a1), // Orange
-        // new THREE.Color(0xffcc6f)  // Red/Orange
+        new THREE.Color(0xffd2a1), // Orange
+        new THREE.Color(0xffcc6f)  // Red/Orange
     ];
 
     for (let i = 0; i < starCount; i++) {
