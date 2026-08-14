@@ -1,24 +1,58 @@
+/* ============================================================
+   BENEDICT LEUNG — MISSION CONTROL
+   ============================================================ */
+
 :root {
-    /* Palette - Mission Control */
+    /* --- Palette --------------------------------------------
+       Warm light sources (gold/red) against a cold instrument
+       chassis (blue/slate). Nothing outside this set.          */
     --void: #030305;
-    --starlight: #E2E2E8;
-    --muted: #c9c9c9;
+    --void-lift: #0A0A10;
+
+    --starlight: #EDEDF3;
+    /* headings, emphasis */
+    --text: #B9BCC9;
+    /* body prose */
+    --muted: #7F8496;
+    /* labels, captions, chrome */
+
     --horizon-gold: #FFD28E;
     --horizon-red: #D66D50;
-    --telemetry-blue: #7F9CBB;
+    --telemetry-blue: #8FA9C6;
 
-    /* Glass / Panels */
-    --glass: rgba(15, 15, 20, 0.75);
-    --border-faint: rgba(255, 255, 255, 0.08);
-    --border-highlight: rgba(255, 255, 255, 0.15);
+    /* --- Glass / Panels ------------------------------------- */
+    --glass: rgba(12, 13, 19, 0.72);
+    --glass-hover: rgba(22, 24, 32, 0.86);
+    --border-faint: rgba(255, 255, 255, 0.07);
+    --border-highlight: rgba(255, 255, 255, 0.16);
+    --edge-light: rgba(255, 255, 255, 0.10);
 
-    /* Typography */
-    --font-heading: 'Playfair Display', serif;
-    --font-mono: 'JetBrains Mono', monospace;
+    /* --- Typography -----------------------------------------
+       Playfair = display. Plex Sans = long-form reading.
+       JetBrains Mono = anything instrument-like: labels,
+       telemetry, buttons, metadata.                            */
+    --font-heading: 'Playfair Display', Georgia, serif;
+    --font-body: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
-    /* Spacing & Layout */
-    --panel-padding: 32px;
+    /* Fluid type scale */
+    --step--2: 0.625rem;
+    --step--1: 0.6875rem;
+    --step-0: 0.8125rem;
+    --step-1: clamp(0.95rem, 0.9rem + 0.25vw, 1.0625rem);
+    --step-2: clamp(1.25rem, 1.1rem + 0.6vw, 1.5rem);
+    --step-3: clamp(1.9rem, 1.5rem + 1.8vw, 3rem);
+    --step-4: clamp(2.4rem, 1.5rem + 3.4vw, 4.15rem);
+
+    --track-wide: 0.18em;
+    --track-mega: 0.28em;
+
+    /* --- Space & motion ------------------------------------- */
+    --gutter: clamp(24px, 6vw, 110px);
+    --section-y: clamp(96px, 12vh, 150px);
+    --panel-padding: clamp(22px, 2vw, 30px);
     --ease-smooth: cubic-bezier(0.2, 0.8, 0.2, 1);
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 * {
@@ -35,12 +69,45 @@ body {
     margin: 0;
     padding: 0;
     background: var(--void);
-    color: var(--starlight);
-    font-family: var(--font-mono);
-    /* Default to mono for tech feel */
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 16px;
     overflow-x: hidden;
     scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+
+/* Keyboard focus — one consistent ring everywhere. */
+:focus-visible {
+    outline: 1px solid var(--horizon-gold);
+    outline-offset: 4px;
+    border-radius: 1px;
+}
+
+/* Scrollbar reads as part of the instrument panel. */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+}
+
+::-webkit-scrollbar {
+    width: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--void);
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.14);
+    border: 3px solid var(--void);
+    border-radius: 99px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.26);
 }
 
 /* --- 3D Background --- */
@@ -54,29 +121,28 @@ body {
     outline: none;
 }
 
-/* --- Horizon Flare (From Snippet) --- */
+/* --- Horizon Flare --- */
 .planet-horizon {
     position: fixed;
     inset: 0;
     pointer-events: none;
     margin-top: 100px;
-    background: radial-gradient(
-        ellipse 200% 150% at 50% -50%,
-        rgba(0,0,0,0) 40%,
-        rgba(42,42,53,0.3) 60%,
-        var(--horizon-red) 65%,
-        var(--horizon-gold) 68%,
-        transparent 72%
-    );
+    background: radial-gradient(ellipse 200% 150% at 50% -50%,
+            rgba(0, 0, 0, 0) 40%,
+            rgba(42, 42, 53, 0.3) 60%,
+            var(--horizon-red) 65%,
+            var(--horizon-gold) 68%,
+            transparent 72%);
     z-index: 1;
     filter: blur(4vmax);
-    pointer-events: none;
     mix-blend-mode: screen;
     opacity: 0.6;
     will-change: transform;
 }
 
-/* --- Loading Screen --- */
+/* ============================================================
+   PRELOADER
+   ============================================================ */
 #preloader {
     position: fixed;
     inset: 0;
@@ -86,6 +152,7 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: 18px;
     transition: opacity 0.8s var(--ease-smooth);
 }
 
@@ -94,11 +161,21 @@ body {
     pointer-events: none;
 }
 
+.loader-text {
+    font-family: var(--font-mono);
+    font-size: var(--step--2);
+    font-weight: 400;
+    letter-spacing: var(--track-mega);
+    color: var(--muted);
+    text-transform: uppercase;
+    text-indent: var(--track-mega);
+}
+
 .loader-bar {
-    width: 120px;
+    width: 160px;
     height: 1px;
-    background: rgba(255, 255, 255, 0.1);
-    margin-top: 16px;
+    background: rgba(255, 255, 255, 0.08);
+    margin-top: 0;
     position: relative;
     overflow: hidden;
 }
@@ -110,102 +187,159 @@ body {
     height: 100%;
     width: 0%;
     background: var(--horizon-gold);
-    transition: width 0.2s linear;
+    box-shadow: 0 0 12px 1px rgba(255, 210, 142, 0.7);
+    transition: width 0.25s linear;
 }
 
-.loader-text {
-    font-size: 0.7rem;
-    letter-spacing: 0.2em;
-    color: var(--muted);
-    text-transform: uppercase;
-}
-
-/* --- Navigation --- */
+/* ============================================================
+   NAVIGATION
+   ============================================================ */
 nav {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
-    padding: 24px 48px;
+    padding: 22px clamp(24px, 4vw, 48px);
     display: flex;
     justify-content: space-between;
     align-items: center;
     z-index: 100;
-    background: linear-gradient(180deg, rgba(3, 3, 5, 0.8) 0%, rgba(3, 3, 5, 0) 100%);
+    background: linear-gradient(180deg, rgba(3, 3, 5, 0.85) 0%, rgba(3, 3, 5, 0) 100%);
     border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-    backdrop-filter: blur(2px);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
 }
 
 .logo {
     font-family: var(--font-mono);
-    font-weight: 700;
-    font-size: 0.8rem;
-    letter-spacing: 0.1em;
-    color: #fff;
+    font-weight: 500;
+    font-size: var(--step--1);
+    letter-spacing: 0.16em;
+    color: var(--starlight);
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
 }
 
+/* Live signal, not just a bullet. */
 .logo-dot {
-    width: 8px;
-    height: 8px;
-    background: #fff;
+    width: 6px;
+    height: 6px;
+    background: var(--horizon-gold);
     border-radius: 50%;
+    flex-shrink: 0;
+    box-shadow:
+        0 0 0 3px rgba(255, 210, 142, 0.10),
+        0 0 14px 1px rgba(255, 210, 142, 0.55);
+    animation: signalPulse 3.2s var(--ease-smooth) infinite;
+}
+
+@keyframes signalPulse {
+
+    0%,
+    100% {
+        box-shadow: 0 0 0 3px rgba(255, 210, 142, 0.10), 0 0 14px 1px rgba(255, 210, 142, 0.55);
+    }
+
+    50% {
+        box-shadow: 0 0 0 5px rgba(255, 210, 142, 0.04), 0 0 20px 2px rgba(255, 210, 142, 0.8);
+    }
 }
 
 .nav-links {
     display: flex;
-    gap: 32px;
+    gap: clamp(20px, 2.5vw, 34px);
 }
 
 .nav-links a {
+    position: relative;
+    padding-bottom: 5px;
     color: var(--muted);
     font-family: var(--font-mono);
-    font-size: 0.7rem;
+    font-size: var(--step--1);
     text-decoration: none;
     text-transform: uppercase;
-    letter-spacing: 0.15em;
-    transition: color 0.3s;
+    letter-spacing: var(--track-wide);
+    transition: color 0.35s var(--ease-smooth);
+}
+
+.nav-links a::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    height: 1px;
+    background: var(--horizon-gold);
+    transform: scaleX(0);
+    transform-origin: right center;
+    transition: transform 0.45s var(--ease-out);
 }
 
 .nav-links a:hover,
 .nav-links a.active {
-    color: #fff;
+    color: var(--starlight);
 }
 
-/* Mobile Menu Toggle Button (Hidden by default) */
+.nav-links a:hover::after,
+.nav-links a.active::after {
+    transform: scaleX(1);
+    transform-origin: left center;
+}
+
+/* --- Hamburger --- */
 .menu-toggle {
     display: none;
     flex-direction: column;
+    justify-content: center;
     gap: 6px;
+    width: 28px;
+    height: 24px;
     cursor: pointer;
     z-index: 101;
 }
+
 .menu-bar {
     width: 24px;
     height: 2px;
-    background: #fff;
-    transition: all 0.3s ease;
+    background: var(--starlight);
+    transform-origin: center;
+    transition: transform 0.4s var(--ease-out), opacity 0.25s ease;
 }
 
-/* Mobile Menu Overlay (Hidden by default) */
+/* The JS toggles .active — this is what it was waiting for. */
+.menu-toggle.active .menu-bar:nth-child(1) {
+    transform: translateY(8px) rotate(45deg);
+}
+
+.menu-toggle.active .menu-bar:nth-child(2) {
+    opacity: 0;
+    transform: scaleX(0.2);
+}
+
+.menu-toggle.active .menu-bar:nth-child(3) {
+    transform: translateY(-8px) rotate(-45deg);
+}
+
+/* --- Mobile Menu --- */
 .mobile-menu {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100vh;
-    background: rgba(3, 3, 5, 0.95);
-    backdrop-filter: blur(20px);
+    height: 100dvh;
+    background: rgba(3, 3, 5, 0.94);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
     z-index: 99;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    gap: 32px;
+    gap: 28px;
     transform: translateY(-100%);
-    transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition: transform 0.6s var(--ease-out);
 }
 
 .mobile-menu.open {
@@ -214,27 +348,34 @@ nav {
 
 .mobile-menu a {
     font-family: var(--font-heading);
-    font-size: 2rem;
+    font-size: clamp(1.75rem, 8vw, 2.5rem);
+    font-weight: 400;
     color: var(--starlight);
     text-decoration: none;
-    text-transform: uppercase;
+    letter-spacing: 0.01em;
     opacity: 0;
-    transform: translateY(20px);
-    transition: all 0.4s ease;
+    transform: translateY(24px);
+    transition: opacity 0.5s var(--ease-out), transform 0.5s var(--ease-out), color 0.3s;
+}
+
+.mobile-menu a:hover {
+    color: var(--horizon-gold);
 }
 
 .mobile-menu.open a {
     opacity: 1;
     transform: translateY(0);
 }
-/* Staggered animation for links */
-.mobile-menu.open a:nth-child(1) { transition-delay: 0.1s; }
-.mobile-menu.open a:nth-child(2) { transition-delay: 0.15s; }
-.mobile-menu.open a:nth-child(3) { transition-delay: 0.2s; }
-.mobile-menu.open a:nth-child(4) { transition-delay: 0.25s; }
-.mobile-menu.open a:nth-child(5) { transition-delay: 0.3s; }
 
-/* --- Layout --- */
+.mobile-menu.open a:nth-child(1) { transition-delay: 0.12s; }
+.mobile-menu.open a:nth-child(2) { transition-delay: 0.17s; }
+.mobile-menu.open a:nth-child(3) { transition-delay: 0.22s; }
+.mobile-menu.open a:nth-child(4) { transition-delay: 0.27s; }
+.mobile-menu.open a:nth-child(5) { transition-delay: 0.32s; }
+
+/* ============================================================
+   LAYOUT
+   ============================================================ */
 main {
     position: relative;
     z-index: 2;
@@ -242,82 +383,100 @@ main {
 
 section {
     min-height: 100vh;
-    min-height: 100svh; 
+    min-height: 100svh;
     display: flex;
     flex-direction: column;
     justify-content: center;
-    padding: 120px 8%;
+    padding: var(--section-y) var(--gutter);
     position: relative;
     pointer-events: none;
 }
 
-/* --- Typography --- */
+/* ============================================================
+   TYPOGRAPHY
+   ============================================================ */
 h1 {
     font-family: var(--font-heading);
-    font-size: clamp(3.5rem, 7vw, 6rem);
+    font-size: var(--step-4);
     font-weight: 400;
-    line-height: 1.1;
-    margin: 0 0 24px 0;
-    color: #fff;
+    line-height: 1.02;
+    letter-spacing: -0.02em;
+    margin: 0 0 20px 0;
+    color: var(--starlight);
 }
 
-/* Gradient Text Effect */
 h1 .highlight {
     font-style: italic;
-    background: linear-gradient(to right, #fff, var(--horizon-gold), var(--horizon-red));
+    background: linear-gradient(100deg, var(--starlight) 0%, var(--horizon-gold) 45%, var(--horizon-red) 100%);
     background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+    /* Optical correction: italics need a touch of left air */
+    padding-right: 0.06em;
 }
 
 h2 {
     font-family: var(--font-heading);
-    font-size: 2.5rem;
+    font-size: var(--step-3);
     font-weight: 400;
+    line-height: 1.1;
+    letter-spacing: -0.015em;
     margin: 0;
-    color: #fff;
+    color: var(--starlight);
 }
 
 p {
-    font-family: var(--font-mono);
-    font-size: 0.9rem;
-    line-height: 1.7;
-    color: var(--starlight);
+    font-family: var(--font-body);
+    font-size: var(--step-1);
+    font-weight: 300;
+    line-height: 1.75;
+    color: var(--text);
     margin: 0;
-    text-shadow: #000000 0px 0 6px;
+    max-width: 64ch;
 }
 
-/* --- UI Components --- */
+a {
+    -webkit-tap-highlight-color: rgba(255, 210, 142, 0.15);
+}
+
+/* ============================================================
+   SECTION LABELS
+   ============================================================ */
 .section-label {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 24px;
+    gap: 14px;
+    margin-bottom: 22px;
 }
 
 .section-line {
-    width: 40px;
+    width: 44px;
     height: 1px;
-    background: var(--muted);
+    background: linear-gradient(90deg, var(--horizon-gold), rgba(255, 210, 142, 0.15));
+    flex-shrink: 0;
 }
 
 .section-text {
     font-family: var(--font-mono);
-    font-size: 0.65rem;
-    color: var(--muted);
+    font-size: var(--step--2);
+    font-weight: 500;
+    color: var(--horizon-gold);
     text-transform: uppercase;
-    letter-spacing: 0.2em;
+    letter-spacing: var(--track-mega);
+    opacity: 0.85;
 }
 
-/* --- Content Containers --- */
+/* ============================================================
+   CONTENT BLOCKS
+   ============================================================ */
 .content-block {
+    position: relative;
     pointer-events: auto;
     max-width: 550px;
     opacity: 0;
     transform: translateY(20px);
-    transition: all 1s var(--ease-smooth);
+    transition: opacity 1s var(--ease-smooth), transform 1s var(--ease-smooth);
     will-change: transform;
-    /* Hint to browser */
 }
 
 section.active .content-block {
@@ -325,20 +484,56 @@ section.active .content-block {
     transform: translateY(0);
 }
 
-/* --- Glass Cards (Refined) --- */
+/* The headline needs a wider measure than prose does. */
+#hero .content-block {
+    max-width: 700px;
+}
+
+/* Button already carries its own top margin; don't double it up
+   when the markup wraps it in a spacer div. */
+.content-block > div .btn-primary {
+    margin-top: 0;
+}
+
+/* Legibility scrim.
+   Replaces the per-element text-shadow: a single soft field of
+   darkness behind prose reads cleaner than glow on every glyph,
+   and it never smudges the type. Only where there's prose. */
+.content-block:has(> p)::before {
+    content: "";
+    position: absolute;
+    inset: -14% -22%;
+    background: radial-gradient(ellipse 62% 58% at 30% 50%,
+            rgba(3, 3, 5, 0.88) 0%,
+            rgba(3, 3, 5, 0.62) 45%,
+            rgba(3, 3, 5, 0) 78%);
+    z-index: -1;
+    pointer-events: none;
+}
+
+.align-right .content-block:has(> p)::before {
+    background: radial-gradient(ellipse 62% 58% at 70% 50%,
+            rgba(3, 3, 5, 0.88) 0%,
+            rgba(3, 3, 5, 0.62) 45%,
+            rgba(3, 3, 5, 0) 78%);
+}
+
+/* ============================================================
+   CARD GRID
+   ============================================================ */
 .card-grid {
     pointer-events: auto;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 24px;
+    grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+    gap: 20px;
     width: 100%;
     max-width: 1400px;
-    margin-top: 40px;
+    margin-top: 36px;
     counter-reset: grid-counter;
     transform: translateY(30px);
     opacity: 0;
-    transition: all 1s var(--ease-smooth);
-    will-change: transform; /* Hint to browser */
+    transition: opacity 1s var(--ease-smooth), transform 1s var(--ease-smooth);
+    will-change: transform;
 }
 
 section.active .card-grid {
@@ -350,84 +545,256 @@ section.active .card-grid {
     position: relative;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
-    min-height: 450px;
-    padding: 32px;
+    min-height: 320px;
+    padding: var(--panel-padding);
+    isolation: isolate;
 
     background: var(--glass);
     border: 1px solid var(--border-faint);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+    border-radius: 3px;
+    backdrop-filter: blur(14px) saturate(115%);
+    -webkit-backdrop-filter: blur(14px) saturate(115%);
+    box-shadow:
+        inset 0 1px 0 0 var(--edge-light),
+        0 20px 44px -16px rgba(0, 0, 0, 0.85);
 
     text-decoration: none;
-    transition: all 0.4s var(--ease-smooth);
     counter-increment: grid-counter;
-    will-change: transform, background-color, border-color;
-    /* Hint to browser */
+    transition:
+        transform 0.5s var(--ease-out),
+        background-color 0.4s var(--ease-smooth),
+        border-color 0.4s var(--ease-smooth),
+        box-shadow 0.5s var(--ease-smooth);
+    will-change: transform;
 }
 
-/* Hover State */
-.glass-card:hover {
+/* Warm light rakes in from the top edge on hover — the same
+   light source as the horizon flare behind it. */
+.glass-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(180deg, rgba(255, 210, 142, 0.09) 0%, transparent 38%);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.45s var(--ease-smooth);
+    z-index: 0;
+}
+
+.glass-card:hover,
+.glass-card:focus-visible {
     border-color: var(--border-highlight);
-    background: rgba(30, 30, 35, 0.85);
-    transform: translateY(-4px);
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.8);
+    background: var(--glass-hover);
+    transform: translateY(-5px);
+    box-shadow:
+        inset 0 1px 0 0 rgba(255, 255, 255, 0.18),
+        0 28px 56px -18px rgba(0, 0, 0, 0.95);
 }
 
-/* Numbering 01, 02... */
+.glass-card:hover::after,
+.glass-card:focus-visible::after {
+    opacity: 1;
+}
+
+/* Log index. decimal-leading-zero keeps 01–99 correct;
+   the old "0" + counter broke at ten entries. */
 .glass-card::before {
-    content: "0" counter(grid-counter);
+    content: counter(grid-counter, decimal-leading-zero);
+    position: absolute;
+    top: calc(var(--panel-padding) + 12px);
+    right: calc(var(--panel-padding) + 12px);
+    z-index: 3;
     font-family: var(--font-mono);
-    font-size: 0.7rem;
-    color: var(--muted);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    padding: 4px 8px;
-    width: max-content;
-    margin-bottom: 20px;
-    display: block;
+    font-size: var(--step--2);
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    color: var(--starlight);
+    opacity: 0.55;
+    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.95);
+    transition: opacity 0.4s, color 0.4s;
 }
 
+.glass-card:hover::before {
+    opacity: 1;
+    color: var(--horizon-gold);
+}
+
+/* --- Card media --- */
 .card-img-container {
-    width: 100%;
-    height: 160px;
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 2px;
-    margin-bottom: 20px;
-    overflow: hidden;
     position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    max-height: 180px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 2px;
+    margin-bottom: 22px;
+    overflow: hidden;
+    flex-shrink: 0;
 }
 
 .card-img-container img {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    opacity: 0.7;
-    filter: grayscale(40%);
-    /* Tech feel */
-    transition: all 0.5s var(--ease-smooth);
+    opacity: 0.72;
+    filter: grayscale(45%) contrast(105%);
+    transition: opacity 0.6s var(--ease-smooth), filter 0.6s var(--ease-smooth), transform 0.7s var(--ease-out);
+}
+
+/* Grounds the image so it doesn't float as a bright rectangle. */
+.card-img-container::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(3, 3, 5, 0.35) 0%, transparent 40%, rgba(3, 3, 5, 0.55) 100%);
+    pointer-events: none;
+}
+
+.glass-card:hover .card-img-container img,
+.glass-card:focus-visible .card-img-container img {
+    opacity: 1;
+    filter: grayscale(0%) contrast(100%);
+    transform: scale(1.06);
+}
+
+/* --- Card text --- */
+/* Title follows the image immediately; the venue rule pins to the
+   card floor so it lines up across a row. Stretching the whole
+   text block down instead left a dead gap under short cards. */
+.card-content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+.card-title {
+    font-family: var(--font-heading);
+    font-size: var(--step-2);
+    font-weight: 400;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    color: var(--starlight);
+    margin-bottom: 10px;
+    transition: color 0.35s var(--ease-smooth);
+}
+
+.glass-card:hover .card-title {
+    color: #fff;
+}
+
+.card-desc {
+    font-family: var(--font-body);
+    font-size: 0.875rem;
+    font-weight: 300;
+    color: var(--text);
+    line-height: 1.6;
+    margin-bottom: 16px;
+}
+
+.card-authors {
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+    font-weight: 300;
+    color: var(--muted);
+    margin-bottom: 18px;
+    line-height: 1.6;
+}
+
+/* Own name: marked, not underlined. */
+.card-authors u {
+    text-decoration: none;
+    color: var(--starlight);
+    box-shadow: inset 0 -1px 0 0 rgba(255, 210, 142, 0.5);
 }
 
 .card-actions {
     display: flex;
-    gap: 10px;
-    margin-bottom: 16px;
+    gap: 8px;
+    margin-bottom: 18px;
     flex-wrap: wrap;
 }
 
+.card-meta {
+    font-family: var(--font-mono);
+    font-size: var(--step--2);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: var(--track-wide);
+    color: var(--telemetry-blue);
+    margin-top: auto;
+    padding-top: 15px;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* Quiet secondary link that sits under a section heading. */
+.view-all {
+    display: inline-block;
+    margin-top: 18px;
+    font-family: var(--font-mono);
+    font-size: var(--step--2);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: var(--track-wide);
+    color: var(--muted);
+    text-decoration: none;
+    pointer-events: auto;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+    padding-bottom: 4px;
+    transition: color 0.3s, border-color 0.3s;
+}
+
+.view-all:hover {
+    color: var(--horizon-gold);
+    border-color: rgba(255, 210, 142, 0.6);
+}
+
+/* Contact links use the same idiom as .view-all so there's one
+   link language across the site. */
+.contact-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px 30px;
+    margin-top: 34px;
+}
+
+.contact-links a {
+    font-family: var(--font-mono);
+    font-size: var(--step-0);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: var(--track-wide);
+    color: var(--muted);
+    text-decoration: none;
+    padding-bottom: 5px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+    transition: color 0.3s, border-color 0.3s;
+}
+
+.contact-links a:hover {
+    color: var(--horizon-gold);
+    border-color: rgba(255, 210, 142, 0.6);
+}
+
+/* ============================================================
+   BUTTONS
+   ============================================================ */
 .btn-small {
     font-family: var(--font-mono);
-    font-size: 0.6rem;
+    font-size: var(--step--2);
+    font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--starlight);
+    letter-spacing: 0.14em;
+    color: var(--muted);
     border: 1px solid var(--border-faint);
-    padding: 6px 12px;
+    padding: 6px 11px;
     text-decoration: none;
-    transition: all 0.3s;
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.03);
     border-radius: 2px;
+    transition: color 0.3s, background-color 0.3s, border-color 0.3s;
 }
 
 .btn-small:hover {
@@ -436,106 +803,82 @@ section.active .card-grid {
     border-color: var(--starlight);
 }
 
-.glass-card:hover .card-img-container img {
-    opacity: 1;
-    filter: grayscale(0%);
-    transform: scale(1.05);
-}
-
-.card-content {
-    margin-top: auto;
-}
-
-.card-title {
-    font-family: var(--font-heading);
-    font-size: 1.5rem;
-    color: rgb(248, 113, 113);
-    margin-bottom: 12px;
-    text-shadow: 0 2px 4px rgba(0,0,0,0.8);
-}
-
-.card-desc {
-    font-family: var(--font-mono);
-    font-size: 0.8rem;
-    color: var(--muted);
-    line-height: 1.6;
-    margin-bottom: 20px;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.9);
-}
-
-.card-authors {
-    font-family: var(--font-mono);
-    font-size: 0.65rem;
-    color: var(--starlight);
-    margin-bottom: 12px;
-    line-height: 1.4;
-    opacity: 0.9;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.8);
-}
-
-.card-meta {
-    font-family: var(--font-mono);
-    font-size: 0.65rem;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--telemetry-blue);
-    padding-top: 16px;
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
-    text-shadow: 0 1px 2px rgba(0,0,0,0.8);
-}
-
-/* --- Buttons --- */
 .btn-primary {
     display: inline-block;
-    margin-top: 32px;
-    padding: 14px 28px;
-    border: 1px solid var(--horizon-gold);
-    background: rgba(255, 210, 142, 0.05);
+    position: relative;
+    margin-top: 30px;
+    padding: 15px 30px;
+    border: 1px solid rgba(255, 210, 142, 0.45);
+    background: rgba(255, 210, 142, 0.04);
     color: var(--horizon-gold);
     text-decoration: none;
     font-family: var(--font-mono);
-    font-size: 0.8rem;
+    font-size: var(--step-0);
+    font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
-    transition: all 0.3s;
+    letter-spacing: var(--track-wide);
+    border-radius: 2px;
     cursor: pointer;
+    overflow: hidden;
+    transition: color 0.4s var(--ease-smooth), border-color 0.4s var(--ease-smooth), box-shadow 0.4s var(--ease-smooth);
+}
+
+/* Fill wipes in rather than snapping. */
+.btn-primary::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--horizon-gold);
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform 0.5s var(--ease-out);
+    z-index: -1;
 }
 
 .btn-primary:hover {
-    background: var(--horizon-gold);
     color: var(--void);
-    box-shadow: 0 0 20px rgba(255, 210, 142, 0.2);
+    border-color: var(--horizon-gold);
+    box-shadow: 0 0 28px -4px rgba(255, 210, 142, 0.35);
 }
 
-/* --- Decorative Tech Elements --- */
+.btn-primary:hover::before {
+    transform: scaleX(1);
+}
+
+/* ============================================================
+   HUD / DECORATIVE INSTRUMENTS
+   ============================================================ */
 .deco-line-vertical {
     position: absolute;
-    right: 48px;
+    right: clamp(24px, 4vw, 48px);
     top: 25%;
     width: 1px;
     height: 150px;
-    background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.1), transparent);
+    background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.14), transparent);
 }
 
 .sys-status {
     position: absolute;
-    right: 60px;
+    right: clamp(38px, 5.2vw, 62px);
     top: 25%;
     font-family: var(--font-mono);
-    font-size: 0.6rem;
+    font-size: var(--step--2);
+    font-weight: 300;
     color: var(--muted);
     writing-mode: vertical-rl;
-    letter-spacing: 0.15em;
+    letter-spacing: var(--track-wide);
 }
 
 .hud-footer {
     position: absolute;
-    bottom: 40px;
-    left: 8%;
+    bottom: 38px;
+    left: var(--gutter);
     display: flex;
     gap: 40px;
     font-family: var(--font-mono);
-    font-size: 0.65rem;
+    font-size: var(--step--2);
+    text-transform: uppercase;
+    letter-spacing: var(--track-wide);
     color: var(--muted);
     pointer-events: none;
 }
@@ -543,16 +886,19 @@ section.active .card-grid {
 .hud-item span {
     display: block;
     color: var(--starlight);
-    margin-top: 4px;
+    margin-top: 6px;
+    letter-spacing: 0.1em;
 }
 
-/* --- Scroll Indicator --- */
+/* ============================================================
+   SCROLL INDICATOR
+   ============================================================ */
 .scroll-indicator {
     position: absolute;
-    bottom: 100px;
+    bottom: 96px;
     left: 50%;
     transform: translateX(-50%);
-    opacity: 0.5;
+    opacity: 0.55;
     z-index: 10;
     pointer-events: none;
 }
@@ -567,13 +913,13 @@ section.active .card-grid {
 
 .indicator-text {
     font-family: var(--font-mono);
-    font-size: 0.6rem;
-    letter-spacing: 0.2em;
+    font-size: var(--step--2);
+    letter-spacing: var(--track-mega);
     text-transform: uppercase;
     color: var(--starlight);
+    text-indent: var(--track-mega);
 }
 
-/* Desktop Mouse */
 .mouse-icon {
     width: 20px;
     height: 32px;
@@ -608,7 +954,6 @@ section.active .card-grid {
     }
 }
 
-/* Mobile Hand */
 .hand-icon {
     width: 24px;
     height: 24px;
@@ -627,24 +972,33 @@ section.active .card-grid {
         opacity: 1;
     }
 
-    80% {
-        transform: translateY(-10px);
-        opacity: 0;
-    }
-
+    80%,
     100% {
         transform: translateY(-10px);
         opacity: 0;
     }
 }
 
-/* Alignment Utilities */
+/* ============================================================
+   ALIGNMENT UTILITIES
+   ------------------------------------------------------------
+   The block is pushed to the right edge, but the text inside
+   stays left-aligned — right-ragged body copy is hard to read,
+   and the reversed rule already signals the side.
+   (The old file declared .align-right twice with conflicting
+   text-align values; this resolves it.)
+   ============================================================ */
+.align-left {
+    align-items: flex-start;
+}
+
 .align-right {
     align-items: flex-end;
 }
 
 .align-right h1,
-.align-right h2 {
+.align-right h2,
+.align-right p {
     text-align: left;
 }
 
@@ -652,7 +1006,13 @@ section.active .card-grid {
     flex-direction: row-reverse;
 }
 
-/* Media Queries for Visibility and Layout */
+.align-right .section-line {
+    background: linear-gradient(270deg, var(--horizon-gold), rgba(255, 210, 142, 0.15));
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
 @media (min-width: 769px) {
     .mobile-indicator {
         display: none;
@@ -664,19 +1024,27 @@ section.active .card-grid {
 }
 
 @media (max-width: 768px) {
-    h1 {
-        font-size: 3rem;
-    }
-
     .card-grid {
         grid-template-columns: 1fr;
+        gap: 16px;
+    }
+
+    .glass-card {
+        min-height: 0;
+    }
+
+    .align-right {
+        align-items: flex-start;
     }
 
     .align-right .section-label {
         flex-direction: row;
     }
 
-    /* Responsive Scroll Indicator Switch */
+    .align-right .section-line {
+        background: linear-gradient(90deg, var(--horizon-gold), rgba(255, 210, 142, 0.15));
+    }
+
     .desktop-indicator {
         display: none;
     }
@@ -684,27 +1052,69 @@ section.active .card-grid {
     .mobile-indicator {
         display: flex;
     }
-    
-    nav { 
-        padding: 24px; 
-        background: linear-gradient(180deg, rgba(3,3,5,0.95) 0%, rgba(3,3,5,0.8) 100%);
+
+    nav {
+        padding: 20px 24px;
+        background: linear-gradient(180deg, rgba(3, 3, 5, 0.96) 0%, rgba(3, 3, 5, 0.75) 100%);
     }
-    .logo { font-size: 1.1rem; } 
-    
-    .nav-links { display: none; }
-    .menu-toggle { display: flex; } /* Show hamburger */
+
+    .logo {
+        font-size: var(--step-0);
+        letter-spacing: 0.1em;
+    }
+
+    .nav-links {
+        display: none;
+    }
+
+    .menu-toggle {
+        display: flex;
+    }
+
+    .deco-line-vertical,
+    .sys-status {
+        display: none;
+    }
+
+    /* Swipe cue owns the bottom edge; telemetry sits above it. */
+    .hud-footer {
+        bottom: 96px;
+        gap: 24px;
+    }
+
+    .scroll-indicator {
+        bottom: 30px;
+    }
 }
 
-/* Alignment Utilities */
-.align-right {
-    align-items: flex-end;
-}
+/* ============================================================
+   REDUCED MOTION
+   Heavy ambient motion on this page; honour the preference.
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
 
-.align-right h1,
-.align-right h2 {
-    text-align: right;
-}
+    html,
+    body {
+        scroll-behavior: auto;
+    }
 
-.align-right .section-label {
-    flex-direction: row-reverse;
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    /* Content must never depend on an animation to become visible. */
+    .content-block,
+    .card-grid {
+        opacity: 1 !important;
+        transform: none !important;
+    }
+
+    .glass-card:hover {
+        transform: none;
+    }
 }

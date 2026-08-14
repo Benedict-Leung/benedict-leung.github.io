@@ -14,7 +14,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <!-- Updated Fonts to match Mission Control aesthetic -->
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500&family=JetBrains+Mono:wght@300;400;500&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
     
     <!-- Three.js Import Map -->
     <script type="importmap">
@@ -106,11 +106,9 @@
                 </div>
                 <div class="mobile-indicator">
                     <!-- Simple hand/swipe icon SVG -->
-                    <svg class="hand-icon" width="24" height="24" viewBox="0 0 10 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <g xmlns="http://www.w3.org/2000/svg" transform="matrix(0.02139,0,0,0.02139,-4.58455,-5.768257)">
-                            <path d="M512.11,364.078C512.11,311.924 469.87,269.666 417.734,269.666C365.562,269.666 323.322,311.924 323.322,364.078C323.322,399.464 342.809,430.26 371.626,446.422L373.587,383.81C373.587,358.167 394.397,337.376 420.058,337.376L422.663,337.376C442.867,337.376 459.257,353.749 459.257,373.954L459.257,448.763C490.547,433.376 512.11,401.276 512.11,364.078Z" style="fill:rgba(255, 255, 255, 0.4);fill-rule:nonzero;"/>
-                            <path d="M459.258,373.954C459.258,353.749 442.869,337.376 422.664,337.376L420.059,337.376C394.398,337.376 373.588,358.167 373.588,383.81L371.627,446.422L367.304,584.436C366.317,588.684 365.711,684.625 365.711,684.625C357.632,676.373 348.608,666.932 340.471,657.869C321.531,636.738 286.75,622.501 263.619,619.88C251.439,618.464 242.11,620.14 235.955,624.806C233.934,626.316 232.028,627.999 230.157,629.811C218.262,641.573 209.235,660.57 217.563,674.484C221.182,680.563 227.382,684.587 233.934,688.836C242.661,694.5 257.367,700.619 268.358,714.687C286.898,738.326 329.686,791.197 355.992,819.424C361.43,822.825 373.022,834.381 378.496,837.308C395.094,847.902 408.672,857.891 413.375,863.307C417.057,867.519 438.772,878.64 438.772,878.64C456.332,889.779 488.339,900.164 525.253,900.164C562.167,900.164 595.608,902.376 620.365,880.603L621.744,880.603L622.346,878.945C647.571,855.887 663.188,823.938 663.188,788.591L663.188,619.65C663.188,611.344 661.378,583.604 638.036,575.258C626.84,571.276 616.228,572.786 607.204,576.674L605.068,576.786L604.409,576.828C600.366,561.586 590.247,551.73 575.253,549.125C557.127,545.99 544.59,551.41 537.055,556.866C529.538,540.74 514.472,532.337 494.134,534.038C478.84,535.342 467.511,542.841 459.259,552.73L459.259,373.954L459.258,373.954Z" style="stroke:rgba(255, 255, 255, 0.4);stroke-width:30;"/>
-                        </g>
+                    <svg class="hand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 20V5" />
+                        <path d="M6 11l6-6 6 6" />
                     </svg>
                     <div class="indicator-text">SWIPE TO EXPLORE</div>
                 </div>
@@ -142,7 +140,7 @@
                     <span class="section-text">RESEARCH LOGS</span>
                 </div>
                 <h2 style="margin-top: 16px;">Publications</h2>
-                <a href="https://scholar.google.com/citations?hl=en&user=ofhVl3wAAAAJ" target="_blank" style="color: var(--muted); font-size: 0.8rem; margin-bottom: 24px; display: inline-block; pointer-events: all;">VIEW ALL</a>
+                <a href="https://scholar.google.com/citations?hl=en&user=ofhVl3wAAAAJ" target="_blank" class="view-all">Full publication list</a>
                 <div class="card-grid">
                     <div class="glass-card">
                         <div class="card-img-container">
@@ -282,7 +280,7 @@
                     <span class="section-text">SELECTED OPERATIONS</span>
                 </div>
                 <h2 style="margin-top: 16px;">Personal Projects</h2>
-                <a href="https://github.com/Benedict-Leung?tab=repositories" target="_blank" style="color: var(--muted); font-size: 0.8rem; margin-bottom: 24px; display: inline-block; pointer-events: all;">VIEW ALL</a>
+                <a href="https://github.com/Benedict-Leung?tab=repositories" target="_blank" class="view-all">All repositories</a>
                 <!-- Grid Container with counters -->
                 <div class="card-grid">
                     <a href="https://github.com/Benedict-Leung/GameBlog" target="_blank" class="glass-card">
@@ -341,15 +339,12 @@
                 <p>
                     Currently looking for new opportunities in HCI research.
                 </p>
-                <div style="margin-top: 40px; display: flex; flex-direction: column; gap: 20px;">
-                    <!-- <a href="mailto:sam.ben.leung@gmail.com" style="color:#fff; text-decoration:none; font-family:var(--font-heading); font-size: 1.5rem;">sam.ben.leung@gmail.com</a> -->
-                    <div style="display: flex; gap: 24px; font-family: var(--font-mono); font-size: 0.8rem;text-shadow: #000000 0px 0 6px;">
-                        <a href="mailto:sam.ben.leung@gmail.com" style="color:var(--starlight); text-decoration:none;">EMAIL</a>
-                        <a href="https://www.linkedin.com/in/ben--leung" target="_blank" style="color:var(--starlight); text-decoration: none;">LINKEDIN</a>
-                        <a href="https://github.com/Benedict-Leung" target="_blank" style="color:var(--starlight); text-decoration: none;">GITHUB</a>
-                        <a href="https://scholar.google.com/citations?hl=en&user=ofhVl3wAAAAJ" target="_blank" style="color:var(--starlight); text-decoration: none;">GOOGLE SCHOLAR</a>
-                        <a href="https://orcid.org/0009-0003-6754-9874" target="_blank" style="color:var(--starlight); text-decoration: none;">ORCID</a>
-                    </div>
+                <div class="contact-links">
+                    <a href="mailto:sam.ben.leung@gmail.com">Email</a>
+                    <a href="https://www.linkedin.com/in/ben--leung" target="_blank">LinkedIn</a>
+                    <a href="https://github.com/Benedict-Leung" target="_blank">GitHub</a>
+                    <a href="https://scholar.google.com/citations?hl=en&user=ofhVl3wAAAAJ" target="_blank">Google Scholar</a>
+                    <a href="https://orcid.org/0009-0003-6754-9874" target="_blank">ORCID</a>
                 </div>
             </div>
         </section>
