@@ -112,7 +112,7 @@ function makeCanvasTexture(w, h, draw) {
     const tex = new THREE.CanvasTexture(c);
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.ClampToEdgeWrapping;
-    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    tex.anisotropy = ANISO;
     tex.generateMipmaps = true;
     tex.minFilter = THREE.LinearMipmapLinearFilter;
     tex.magFilter = THREE.LinearFilter;
@@ -143,9 +143,62 @@ function generateSunTexture(w, h) {
 // --- 2. SETUP ---
 const EXTRA_HEIGHT = 100; // pixels beyond viewport
 const canvas = document.getElementById("bg");
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+// PERF: single place to tune how expensive the scene is.
+const IS_MOBILE = /Android|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(navigator.userAgent)
+    || (navigator.maxTouchPoints > 1 && Math.min(window.innerWidth, window.innerHeight) < 900);
+
+const MAX_DPR = IS_MOBILE ? 1.5 : 2;          // hard ceiling on render resolution
+const ANISO = IS_MOBILE ? 2 : 4;              // 16x anisotropy costs a lot for no visible gain here
+const MAX_TEX_SIZE = IS_MOBILE ? 1024 : 2048; // 4K planet maps get downscaled once at load
+const SPHERE_SEG_W = IS_MOBILE ? 32 : 48;     // 64x64 spheres were ~8k triangles each
+const SPHERE_SEG_H = IS_MOBILE ? 16 : 32;
+const RING_SEG = IS_MOBILE ? 64 : 96;
+
+const renderer = new THREE.WebGLRenderer({
+    canvas,
+    // MSAA at DPR 2 is the most expensive single setting on mobile GPUs
+    antialias: !IS_MOBILE,
+    alpha: false,
+    stencil: false,
+    powerPreference: "high-performance"
+});
+
+// PERF: adaptive resolution. If the GPU falls behind, step the pixel ratio down
+// (and back up when it recovers) instead of dropping frames.
+const DPR_STEPS = [Math.min(window.devicePixelRatio || 1, MAX_DPR), 1.5, 1.25, 1.0, 0.75]
+    .filter((v, i, arr) => i === 0 || v < arr[0]);
+let dprIndex = 0;
+
+renderer.setPixelRatio(DPR_STEPS[0]);
 renderer.setSize(window.innerWidth, window.innerHeight + EXTRA_HEIGHT);
+
+let qualityAccum = 0;
+let qualitySamples = 0;
+let warmupFrames = 90;  // ignore the first ~1.5s (texture uploads, GSAP intro)
+let upgradeBudget = 2;  // limits flip-flopping between two levels
+
+function updateAdaptiveQuality(dt) {
+    if (warmupFrames > 0) { warmupFrames--; return; }
+
+    qualityAccum += dt;
+    qualitySamples++;
+    if (qualitySamples < 45) return;
+
+    const avg = qualityAccum / qualitySamples;
+    qualityAccum = 0;
+    qualitySamples = 0;
+
+    if (avg > 1 / 45 && dprIndex < DPR_STEPS.length - 1) {
+        dprIndex++;                                   // below 45fps -> drop resolution
+        renderer.setPixelRatio(DPR_STEPS[dprIndex]);
+    } else if (avg < 1 / 58 && dprIndex > 0 && upgradeBudget > 0) {
+        dprIndex--;                                   // comfortably above 58fps -> give it back
+        upgradeBudget--;
+        renderer.setPixelRatio(DPR_STEPS[dprIndex]);
+    }
+}
+
 // Using ACESFilmicToneMapping to handle bright highlights on planets nicely
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.2;
@@ -273,8 +326,33 @@ const textureLoader = new THREE.TextureLoader(loadingManager);
 const IMAGE_BASE = "static/img/";
 
 // Helper to load texture with correct settings
+// PERF: a 4K map costs ~45MB of VRAM (more with mipmaps) and thrashes the
+// texture cache on integrated/mobile GPUs. Downscale once, then upload it
+// straight away so nothing has to be streamed in mid-scroll.
+function fitTexture(tex) {
+    const img = tex.image;
+    if (img && img.width) {
+        const largest = Math.max(img.width, img.height);
+        if (largest > MAX_TEX_SIZE) {
+            const scale = MAX_TEX_SIZE / largest;
+            const c = document.createElement("canvas");
+            c.width = Math.max(1, Math.round(img.width * scale));
+            c.height = Math.max(1, Math.round(img.height * scale));
+            const ctx = c.getContext("2d");
+            ctx.imageSmoothingQuality = "high";
+            ctx.drawImage(img, 0, 0, c.width, c.height);
+            tex.image = c;
+        }
+    }
+    tex.anisotropy = ANISO;
+    tex.needsUpdate = true;
+    // upload now rather than on the frame it first becomes visible
+    if (typeof renderer.initTexture === 'function') renderer.initTexture(tex);
+    return tex;
+}
+
 const loadTex = (path, srgb = true) => {
-    const t = textureLoader.load(path);
+    const t = textureLoader.load(path, fitTexture);
     t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
     return t;
 };
@@ -297,7 +375,7 @@ const createEarth = () => {
     grp.position.set(200, 0, 0);
 
     // 1. Base Sphere (Albedo + Bump)
-    const geo = new THREE.SphereGeometry(10, 64, 64);
+    const geo = new THREE.SphereGeometry(10, SPHERE_SEG_W, SPHERE_SEG_H);
     const mat = new THREE.MeshStandardMaterial({
         map: loadTex(IMAGE_BASE + "Earth/2_no_clouds_4k.jpg"),
         bumpMap: loadTex(IMAGE_BASE + "Earth/elev_bump_4k.jpg", false),
@@ -306,21 +384,19 @@ const createEarth = () => {
         metalness: 0.1
     });
     const mesh = new THREE.Mesh(geo, mat);
-    // Optimization: Keep active even when off-screen to prevent wake-up lag
-    mesh.frustumCulled = false;
     grp.add(mesh);
 
     // 2. Clouds (Slightly larger sphere)
-    const cloudGeo = new THREE.SphereGeometry(10.15, 64, 64);
+    const cloudGeo = new THREE.SphereGeometry(10.15, SPHERE_SEG_W, SPHERE_SEG_H);
     const cloudMat = new THREE.MeshStandardMaterial({
         map: loadTex(IMAGE_BASE + "Earth/fair_clouds_4k.png"),
         transparent: true,
         opacity: 0.8,
         blending: THREE.AdditiveBlending,
-        side: THREE.DoubleSide
+        side: THREE.DoubleSide,
+        depthWrite: false // additive layer should never write depth
     });
     const cloudMesh = new THREE.Mesh(cloudGeo, cloudMat);
-    cloudMesh.frustumCulled = false;
     grp.add(cloudMesh);
 
     scene.add(grp);
@@ -332,7 +408,7 @@ const createMars = () => {
     const grp = new THREE.Group();
     grp.position.set(400, 0, 0);
 
-    const geo = new THREE.SphereGeometry(8, 64, 64);
+    const geo = new THREE.SphereGeometry(8, SPHERE_SEG_W, SPHERE_SEG_H);
     const mat = new THREE.MeshStandardMaterial({
         map: loadTex(IMAGE_BASE + "Mars/Mars.png"),
         normalMap: loadTex(IMAGE_BASE + "Mars/MarsNormal.png", false),
@@ -341,7 +417,6 @@ const createMars = () => {
         metalness: 0.0
     });
     const mesh = new THREE.Mesh(geo, mat);
-    mesh.frustumCulled = false;
     grp.add(mesh);
 
     scene.add(grp);
@@ -354,7 +429,7 @@ const createJupiter = () => {
     grp.position.set(600, 0, 0);
 
     // ---- Jupiter sphere ----
-    const geo = new THREE.SphereGeometry(18, 64, 64);
+    const geo = new THREE.SphereGeometry(18, SPHERE_SEG_W, SPHERE_SEG_H);
     const mat = new THREE.MeshStandardMaterial({
         map: loadTex(IMAGE_BASE + "Jupiter/realj2k.jpg"),
         bumpMap: loadTex(IMAGE_BASE + "Jupiter/jupiter-hubble-2015-bump.jpg", false),
@@ -363,13 +438,12 @@ const createJupiter = () => {
     });
 
     const mesh = new THREE.Mesh(geo, mat);
-    mesh.frustumCulled = false;
     grp.add(mesh);
 
     // ---- Rings geometry ----
     const innerRadius = 18 * 1.3;
     const outerRadius = 18 * 3.2;
-    const ringGeo = new THREE.RingGeometry(innerRadius, outerRadius, 128);
+    const ringGeo = new THREE.RingGeometry(innerRadius, outerRadius, RING_SEG);
 
     // UV remap for strip texture
     const pos = ringGeo.attributes.position;
@@ -382,8 +456,20 @@ const createJupiter = () => {
         uv.setXY(i, u, 0.5);
     }
 
-    // ---- Rings texture (async-safe) ----
-    const tex = loadTex(IMAGE_BASE + "Jupiter/JupiterRings.png");
+    // ---- Rings texture ----
+    // PERF (critical): this used to configure the texture inside tex.onUpdate and
+    // set tex.needsUpdate / ringMat.needsUpdate from within that callback. three.js
+    // fires onUpdate at the end of every upload, so it re-uploaded the ring texture
+    // AND recompiled the ring shader on every frame, forever. Filter/wrap settings
+    // are applied here instead - three reads them when it first uploads the texture.
+    const tex = textureLoader.load(IMAGE_BASE + "Jupiter/JupiterRings.png", fitTexture);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.generateMipmaps = false;
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    tex.premultiplyAlpha = false;
 
     const ringMat = new THREE.MeshStandardMaterial({
         map: tex,
@@ -403,41 +489,25 @@ const createJupiter = () => {
         emissiveIntensity: 0.8
     });
 
-    tex.onUpdate = () => {
-        tex.colorSpace = THREE.SRGBColorSpace;
-        tex.generateMipmaps = false;
-        tex.minFilter = THREE.LinearFilter;
-        tex.magFilter = THREE.LinearFilter;
-        tex.wrapS = THREE.RepeatWrapping;
-        tex.wrapT = THREE.ClampToEdgeWrapping;
-        tex.premultiplyAlpha = false;
-
-        tex.needsUpdate = true;
-        ringMat.needsUpdate = true; // force shader recompilation
-    };
-
     // ---- Rings mesh ----
     const ringMesh = new THREE.Mesh(ringGeo, ringMat);
     ringMesh.rotation.x = -Math.PI / 2;
-    ringMesh.frustumCulled = false;
     ringMesh.renderOrder = 1;
 
     mesh.add(ringMesh);
 
-   const cloudGeo = new THREE.SphereGeometry(18.1, 64, 64);
+    const cloudGeo = new THREE.SphereGeometry(18.1, SPHERE_SEG_W, SPHERE_SEG_H);
     const cloudMat = new THREE.MeshStandardMaterial({
         map: loadTex(IMAGE_BASE + "Jupiter/jupiterclouds.png"),
         transparent: true,
-        opacity: 0.8,
+        opacity: 0.55, // was declared twice; 0.55 was the one that applied
         blending: THREE.AdditiveBlending,
         side: THREE.DoubleSide,
-        opacity: 0.55,
         depthWrite: false,
         roughness: 1.0,
-        metalness: 0.0,
+        metalness: 0.0
     });
     const cloudMesh = new THREE.Mesh(cloudGeo, cloudMat);
-    cloudMesh.frustumCulled = false;
     grp.add(cloudMesh);
 
     scene.add(grp);
@@ -450,7 +520,7 @@ const createSaturn = () => {
     grp.position.set(800, 0, 0);
 
     // 1. Planet
-    const geo = new THREE.SphereGeometry(16, 64, 64);
+    const geo = new THREE.SphereGeometry(16, SPHERE_SEG_W, SPHERE_SEG_H);
     const mat = new THREE.MeshStandardMaterial({
         map: loadTex(IMAGE_BASE + "Saturn/th_saturn.png"),
         bumpMap: loadTex(IMAGE_BASE + "Saturn/th_saturnbump.png", false),
@@ -458,13 +528,10 @@ const createSaturn = () => {
         roughness: 0.6,
     });
     const mesh = new THREE.Mesh(geo, mat);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    mesh.frustumCulled = false;
-    grp.add(mesh);
+    grp.add(mesh); // shadow flags removed: renderer.shadowMap is disabled, so they did nothing
 
     // 2. Rings
-    const ringGeo = new THREE.RingGeometry(22, 42, 128);
+    const ringGeo = new THREE.RingGeometry(22, 42, RING_SEG);
     const ringMat = new THREE.MeshStandardMaterial({
         map: loadTex(IMAGE_BASE + "Saturn/t00fri_gh_saturnrings.png"),
         color: 0xffffff,
@@ -488,8 +555,6 @@ const createSaturn = () => {
 
     const ring = new THREE.Mesh(ringGeo, ringMat);
     ring.rotation.x = -Math.PI / 2;
-    ring.receiveShadow = true;
-    ring.frustumCulled = false;
     grp.add(ring);
 
     scene.add(grp);
@@ -567,11 +632,26 @@ function initScroll() {
 const clock = new THREE.Clock();
 const planetHorizon = document.getElementById('planet-horizon');
 
-function animate() {
+// PERF: read scroll position from a passive listener. Reading window.scrollY /
+// innerHeight inside the loop can force a style+layout flush every frame.
+let scrollYCached = window.scrollY;
+let viewportH = window.innerHeight;
+let lastHorizonScroll = -1;
+window.addEventListener('scroll', () => { scrollYCached = window.scrollY; }, { passive: true });
+
+// Set to 60 if a high-refresh display gives you an unstable rate that feels
+// worse than a locked 60. 0 = follow the display.
+const MAX_FPS = 0;
+let lastFrameTime = 0;
+
+function animate(now = 0) {
     requestAnimationFrame(animate);
 
+    if (MAX_FPS > 0 && now - lastFrameTime < (1000 / MAX_FPS) - 0.5) return;
+    lastFrameTime = now;
+
     const dt = Math.min(clock.getDelta(), 0.1);
-    const time = clock.getElapsedTime();
+    updateAdaptiveQuality(dt);
 
     // 1. Rotate Planets for life
     if (planets.earth) {
@@ -591,11 +671,15 @@ function animate() {
     starUniforms.time.value += dt;
 
     // 3. Horizon Parallax (Handled exclusively here if cinematic is finished)
-    if (planetHorizon && !isIntroPlaying) {
-        const maxTranslateY = window.innerHeight * 0.6;
+    // PERF: only touch the DOM when the scroll position actually changed. This
+    // is a full-screen blurred, screen-blended layer - re-transforming it every
+    // frame forces the compositor to redo that work even when nothing moved.
+    if (planetHorizon && !isIntroPlaying && scrollYCached !== lastHorizonScroll) {
+        lastHorizonScroll = scrollYCached;
+        const maxTranslateY = viewportH * 0.6;
         const maxScroll = maxTranslateY / 0.15;
 
-        const rawScroll = Math.min(window.scrollY, maxScroll);
+        const rawScroll = Math.min(scrollYCached, maxScroll);
         const t = rawScroll / maxScroll;
         const eased = 1 - Math.pow(1 - t, 20);
 
@@ -606,8 +690,9 @@ function animate() {
 
     // 4. Smooth Camera Interpolation (Only runs once cinematic ends)
     if (!isIntroPlaying) {
-        // Use Linear Interpolation (Lerp) to move current pos towards target pos
-        const damp = 2.0 * dt;
+        // Frame-rate independent damping. `2.0 * dt` overshoots on slow frames
+        // and crawls on fast ones, which reads as stutter even at a good fps.
+        const damp = 1 - Math.exp(-2.0 * dt);
         camPos.lerp(targetView.pos, damp);
         camLook.lerp(targetView.lookAt, damp);
 
@@ -619,12 +704,15 @@ function animate() {
 }
 
 function setCanvasHeight() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight + EXTRA_HEIGHT;
+    // renderer.setSize owns canvas.width/height - setting them by hand first just
+    // caused an extra (discarded) drawing-buffer allocation.
+    const w = window.innerWidth;
+    const h = window.innerHeight + EXTRA_HEIGHT;
 
-    camera.aspect = window.innerWidth / canvas.height;
+    viewportH = window.innerHeight;
+    camera.aspect = w / h;
     camera.updateProjectionMatrix();
-    renderer.setSize(canvas.width, canvas.height);
+    renderer.setSize(w, h);
 }
 
 // Handle Resize
@@ -632,6 +720,18 @@ let windowWidth = window.innerWidth;
 let windowHeight = window.innerHeight;
 
 let heightUnlocked = false;
+
+// PERF: resizing reallocates the drawing buffer, so coalesce bursts of resize
+// events (mobile URL bar, window drags) into one resize per frame.
+let resizeScheduled = false;
+function scheduleResize() {
+    if (resizeScheduled) return;
+    resizeScheduled = true;
+    requestAnimationFrame(() => {
+        resizeScheduled = false;
+        setCanvasHeight();
+    });
+}
 
 window.addEventListener('resize', () => {
     const newWidth = window.innerWidth;
@@ -643,7 +743,7 @@ window.addEventListener('resize', () => {
     if (newWidth !== windowWidth) {
         windowWidth = newWidth;
         windowHeight = newHeight;
-        setCanvasHeight();
+        scheduleResize();
         heightUnlocked = true;
         return;
     }
@@ -657,27 +757,26 @@ window.addEventListener('resize', () => {
 
     // Once unlocked → always resize
     windowHeight = newHeight;
-    setCanvasHeight();
+    scheduleResize();
 });
 
 window.addEventListener('orientationchange', () => {
     windowWidth = window.innerWidth;
     windowHeight = window.innerHeight;
-    setCanvasHeight();
+    scheduleResize();
 });
 
 // --- 7. SYSTEM INITIALIZATION ---
 function initSystem() {
     // Sun (Central Light) - Visual representation with Procedural Noise
     const sunTex = generateSunTexture(512, 256);
-    const sunGeo = new THREE.SphereGeometry(15, 64, 64);
-    const sunMat = new THREE.MeshStandardMaterial({
-        color: 0x000000,
-        emissive: 0xffc35b,
-        emissiveMap: sunTex,
-        emissiveIntensity: 0.8,
-        roughness: 1.0,
-        metalness: 0.0
+    const sunGeo = new THREE.SphereGeometry(15, SPHERE_SEG_W, SPHERE_SEG_H);
+    // PERF: the sun was a PBR material with a black base colour, so all the
+    // lighting maths resolved to zero and only the emissive map was visible.
+    // MeshBasicMaterial renders the identical image without the lighting pass.
+    const sunMat = new THREE.MeshBasicMaterial({
+        map: sunTex,
+        color: new THREE.Color(0xffc35b).multiplyScalar(0.8) // matches emissiveIntensity 0.8
     });
     sun = new THREE.Mesh(sunGeo, sunMat);
 
@@ -705,7 +804,7 @@ function initSystem() {
 
     // Starfield
     const starGeo = new THREE.BufferGeometry();
-    const starCount = 8000;
+    const starCount = IS_MOBILE ? 4000 : 8000;
     const starPos = new Float32Array(starCount * 3);
     const starColors = new Float32Array(starCount * 3);
     const starSizes = new Float32Array(starCount);
