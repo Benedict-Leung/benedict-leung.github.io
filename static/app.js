@@ -364,7 +364,8 @@ let sun;
 let starField;
 let starUniforms = { 
     time: { value: 0 },
-    introProgress: { value: 0.0 }
+    introProgress: { value: 0.0 },
+    warpFade: { value: 0.0 }   // stars recede while the streaks take over
 };
 
 // --- PLANET CREATION LOGIC ---
@@ -588,11 +589,347 @@ const views = {
     }
 };
 
-let targetView = views.overview;
+// Section order, so the system knows whether you're travelling outward or inward
+// and how many orbits a single jump crosses.
+const VIEW_ORDER = ['overview', 'earth', 'mars', 'jupiter', 'saturn'];
+
+// --- CINEMATIC FLIGHT SYSTEM ------------------------------------------------
+// The old behaviour was a straight lerp toward a target, which reads as a flat
+// slide: no departure, no arrival, no sense of speed. Instead each section change
+// now builds a one-off flight path - a curve that lifts off the ecliptic, weaves
+// past the planets in between, and settles into the destination from above.
+// Everything else (FOV punch, star streaks, banking, vignette) is driven by the
+// camera's actual velocity, so it stays in sync no matter how the path is built.
+
+const BASE_FOV = camera.fov;
+const BASE_EXPOSURE = renderer.toneMappingExposure;
 
 // Smooth camera movement vars synced to intro lookAt initially
 const camPos = new THREE.Vector3().copy(camera.position);
 const camLook = new THREE.Vector3().copy(introLookAt);
+
+const camVel = new THREE.Vector3();                      // world units / second
+const prevPos = new THREE.Vector3().copy(camPos);
+let warp = 0;              // 0..1 smoothed "how fast are we moving", drives all FX
+let bank = 0;              // radians of roll into the turn
+let orbitPhase = 0;        // idle drift once parked at a planet
+let currentViewKey = 'overview';
+let flight = null;
+
+// Scratch vectors - allocating inside the render loop is the one thing that
+// reliably causes GC hitches in a scroll-driven scene.
+const _a = new THREE.Vector3();
+const _b = new THREE.Vector3();
+const _fwd = new THREE.Vector3();
+const _right = new THREE.Vector3();
+const _camUp = new THREE.Vector3();
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
+
+// Symmetric quart: gentle undock, hard acceleration through the middle
+// (peak speed is 4x the average, which is what sells the warp), soft docking.
+function easeFlight(t) {
+    return t < 0.5 ? 8 * t * t * t * t : 1 - Math.pow(-2 * t + 2, 4) / 2;
+}
+function smoothstep01(e0, e1, x) {
+    const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)));
+    return t * t * (3 - 2 * t);
+}
+
+function flyTo(key) {
+    const view = views[key];
+    if (!view || key === currentViewKey) return;
+
+    const fromIdx = VIEW_ORDER.indexOf(currentViewKey);
+    const toIdx = VIEW_ORDER.indexOf(key);
+    currentViewKey = key;
+
+    const from = camPos.clone();
+    const dist = from.distanceTo(view.pos);
+
+    // Long jumps (nav clicks that skip sections) get a bigger, slower arc than
+    // neighbour-to-neighbour scrolling.
+    const dur = THREE.MathUtils.clamp(1.15 + dist / 280, 1.3, 3.4);
+    const arcH = THREE.MathUtils.clamp(dist * 0.22, 14, 95);
+
+    // Direction of travel, flattened onto the ecliptic.
+    _a.subVectors(view.pos, from);
+    const flatDir = new THREE.Vector3(_a.x, 0, _a.z);
+    if (flatDir.lengthSq() < 1e-6) flatDir.set(0, 0, 1);
+    flatDir.normalize();
+
+    // In-plane perpendicular: the path bows out to one side instead of running
+    // dead straight down the orbit line, and alternates side per hop so a long
+    // multi-planet run weaves rather than repeating the same curve.
+    const side = new THREE.Vector3(-flatDir.z, 0, flatDir.x);
+    const weaveSign = (Math.min(fromIdx, toIdx) % 2 === 0 ? 1 : -1) * (toIdx > fromIdx ? 1 : -1);
+    const weave = dist * 0.14;
+
+    // P1 leaves along the CURRENT velocity, so interrupting a flight mid-arc
+    // (fast scrolling) blends instead of snapping.
+    const p1 = from.clone()
+        .addScaledVector(camVel, 0.18)
+        .addScaledVector(flatDir, dist * 0.12)
+        .addScaledVector(WORLD_UP, arcH * 0.35);
+
+    const mid = from.clone().lerp(view.pos, 0.5)
+        .addScaledVector(WORLD_UP, arcH)
+        .addScaledVector(side, weave * weaveSign);
+
+    // Approach from above and slightly behind the final framing, so the planet
+    // rises into frame as the camera drops into place.
+    _b.subVectors(view.pos, view.lookAt).normalize();
+    const approach = view.pos.clone()
+        .addScaledVector(_b, dist * 0.10)
+        .addScaledVector(WORLD_UP, arcH * 0.30)
+        .addScaledVector(side, weave * weaveSign * 0.25);
+
+    const posCurve = new THREE.CatmullRomCurve3(
+        [from, p1, mid, approach, view.pos.clone()], false, 'centripetal'
+    );
+
+    // The gaze leads the flight: it swings ahead into the direction of travel at
+    // the midpoint - you see where you're going, not just where you were - then
+    // settles onto the destination.
+    const lookFrom = camLook.clone();
+    const lookMid = lookFrom.clone().lerp(view.lookAt, 0.55)
+        .addScaledVector(flatDir, dist * 0.20)
+        .addScaledVector(WORLD_UP, -arcH * 0.22);
+    const lookCurve = new THREE.CatmullRomCurve3(
+        [lookFrom, lookMid, view.lookAt.clone()], false, 'centripetal'
+    );
+
+    // getPointAt() is arc-length parameterised, so the easing curve controls the
+    // speed profile exactly instead of the control-point spacing doing it for us.
+    posCurve.getLengths(48);
+    lookCurve.getLengths(24);
+
+    flight = { posCurve, lookCurve, t: 0, dur, bankDir: -weaveSign };
+    orbitPhase = 0;
+}
+
+// --- Pointer parallax (desktop only) ---
+let pointerX = 0, pointerY = 0, parX = 0, parY = 0;
+if (!IS_MOBILE) {
+    window.addEventListener('pointermove', (e) => {
+        pointerX = (e.clientX / window.innerWidth) * 2 - 1;
+        pointerY = (e.clientY / window.innerHeight) * 2 - 1;
+    }, { passive: true });
+}
+
+// --- Speed vignette -------------------------------------------------------
+// One fixed, compositor-only layer whose opacity tracks --warp. Move this into
+// app.css if you'd rather keep styling out of the JS.
+const warpVeil = document.createElement('div');
+warpVeil.className = 'warp-veil';
+const warpStyle = document.createElement('style');
+warpStyle.textContent = `
+:root { --warp: 0; --warp-x: 50%; --warp-y: 50%; }
+.warp-veil {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    pointer-events: none;
+    opacity: var(--warp);
+    background:
+        radial-gradient(circle at var(--warp-x) var(--warp-y),
+            rgba(198, 216, 255, 0.30) 0%,
+            rgba(143, 169, 198, 0.10) 9%,
+            rgba(3, 3, 5, 0) 30%),
+        radial-gradient(ellipse at var(--warp-x) var(--warp-y),
+            rgba(3, 3, 5, 0) 34%, rgba(3, 3, 5, 0.72) 100%);
+    will-change: opacity;
+}
+@media (prefers-reduced-motion: reduce) {
+    .warp-veil { display: none; }
+}
+`;
+document.head.appendChild(warpStyle);
+document.body.appendChild(warpVeil);
+let lastWarpVar = -1;
+let vanishX = 50, vanishY = 50;
+
+// --- Warp streak field ----------------------------------------------------
+// Camera-facing ribbons, not GL lines: line width is capped at 1px on nearly
+// every driver, which is why the hairline version never read as cinematic.
+// Each streak is a quad expanded in screen space along its own projected
+// direction, so it has real thickness, a soft glow and a hot core.
+let warpField = null;
+const warpUniforms = {
+    uCam: { value: new THREE.Vector3() },
+    uDir: { value: new THREE.Vector3(0, 0, 1) },
+    uLen: { value: 0 },
+    uBox: { value: 300 },
+    uThick: { value: 0.003 },
+    uWarp: { value: 0 },
+    uRes: { value: new THREE.Vector2(window.innerWidth, window.innerHeight + EXTRA_HEIGHT) },
+    uOpacity: { value: 0 }
+};
+
+function createWarpField() {
+    const COUNT = IS_MOBILE ? 700 : 2200;
+    const BOX = warpUniforms.uBox.value;
+
+    const positions = new Float32Array(COUNT * 4 * 3);
+    const sides = new Float32Array(COUNT * 4);
+    const alongs = new Float32Array(COUNT * 4);
+    const seeds = new Float32Array(COUNT * 4);
+    const indices = new Uint32Array(COUNT * 6);
+
+    // quad corners: (side, along)
+    const CORNER = [[-1, 0], [1, 0], [1, 1], [-1, 1]];
+
+    for (let i = 0; i < COUNT; i++) {
+        const x = Math.random() * BOX;
+        const y = Math.random() * BOX;
+        const z = Math.random() * BOX;
+        // Bias the seed low so most streaks are fine and a few are fat and bright,
+        // which is what stops the field looking like uniform noise.
+        const seed = Math.pow(Math.random(), 1.6);
+
+        for (let k = 0; k < 4; k++) {
+            const j = i * 4 + k;
+            positions[j * 3] = x;
+            positions[j * 3 + 1] = y;
+            positions[j * 3 + 2] = z;
+            sides[j] = CORNER[k][0];
+            alongs[j] = CORNER[k][1];
+            seeds[j] = seed;
+        }
+
+        const o = i * 4;
+        const t = i * 6;
+        indices[t] = o; indices[t + 1] = o + 1; indices[t + 2] = o + 2;
+        indices[t + 3] = o; indices[t + 4] = o + 2; indices[t + 5] = o + 3;
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('aSide', new THREE.BufferAttribute(sides, 1));
+    geo.setAttribute('aAlong', new THREE.BufferAttribute(alongs, 1));
+    geo.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 1));
+    geo.setIndex(new THREE.BufferAttribute(indices, 1));
+
+    const mat = new THREE.ShaderMaterial({
+        uniforms: warpUniforms,
+        vertexShader: `
+            attribute float aSide;
+            attribute float aAlong;
+            attribute float aSeed;
+
+            uniform vec3 uCam;
+            uniform vec3 uDir;
+            uniform float uLen;
+            uniform float uBox;
+            uniform float uThick;
+            uniform float uWarp;
+            uniform vec2 uRes;
+
+            varying float vSide;
+            varying float vAlong;
+            varying float vSeed;
+            varying float vFade;
+
+            const float NEAR_Z = -0.5;
+
+            void main() {
+                // Infinite tiling: wrap the streak's anchor into a cube centred on
+                // the camera, so the field always surrounds us without respawning.
+                vec3 rel = mod(position - uCam, uBox) - uBox * 0.5;
+                vec3 head = uCam + rel;
+                float len = uLen * (0.5 + aSeed * 1.3);
+                vec3 tail = head - uDir * len;
+
+                vec4 vH = viewMatrix * vec4(head, 1.0);
+                vec4 vT = viewMatrix * vec4(tail, 1.0);
+
+                // Clip the tail against the near plane rather than dropping the whole
+                // streak - otherwise long streaks pop out as they sweep past the lens.
+                if (vT.z > NEAR_Z && vH.z < NEAR_Z) {
+                    float k = (NEAR_Z - vH.z) / (vT.z - vH.z);
+                    vT.xyz = mix(vH.xyz, vT.xyz, clamp(k, 0.0, 1.0));
+                }
+
+                vec4 cH = projectionMatrix * vH;
+                vec4 cT = projectionMatrix * vT;
+
+                // Build the ribbon in screen space so it holds a constant pixel width
+                // however far away it is. This is what gives it body instead of the
+                // hairline you get from GL_LINES.
+                float aspect = uRes.x / max(uRes.y, 1.0);
+                vec2 sH = cH.xy / max(cH.w, 1e-4);
+                vec2 sT = cT.xy / max(cT.w, 1e-4);
+                vec2 seg = vec2((sT.x - sH.x) * aspect, sT.y - sH.y);
+                vec2 dir2 = normalize(seg + vec2(1e-5));
+                vec2 nrm = vec2(-dir2.y / aspect, dir2.x);
+
+                vec4 clip = projectionMatrix * mix(vH, vT, aAlong);
+                float thick = uThick * (0.45 + aSeed * 1.0) * mix(1.0, 0.22, aAlong);
+                clip.xy += nrm * aSide * thick * clip.w;
+
+                float d = length(rel);
+                float fade = smoothstep(uBox * 0.03, uBox * 0.16, d) *
+                             (1.0 - smoothstep(uBox * 0.30, uBox * 0.50, d));
+
+                // Thin out the vanishing point. Real warp shots keep the centre of
+                // frame clear and throw the density out to the edges.
+                float r = length(vec2(sH.x * aspect, sH.y));
+                fade *= 0.18 + 0.82 * smoothstep(0.04, 0.50, r);
+
+                // Staggered ignition: streaks light up in waves as speed builds
+                // instead of the whole field switching on at once.
+                fade *= smoothstep(aSeed * 0.5, aSeed * 0.5 + 0.3, uWarp);
+                fade *= step(vH.z, NEAR_Z);
+
+                vSide = aSide;
+                vAlong = aAlong;
+                vSeed = aSeed;
+                vFade = fade;
+
+                gl_Position = clip;
+            }
+`,
+        fragmentShader: `
+            uniform float uOpacity;
+            varying float vSide;
+            varying float vAlong;
+            varying float vSeed;
+            varying float vFade;
+
+            void main() {
+                // Soft glow across the ribbon with a blown-out core down the middle.
+                float a = 1.0 - abs(vSide);
+                float glow = pow(a, 2.2);
+                float core = smoothstep(0.70, 1.0, a);
+                float taper = pow(1.0 - vAlong, 1.5);
+                float spark = smoothstep(0.88, 1.0, 1.0 - vAlong) * core;
+
+                vec3 cool = vec3(0.55, 0.70, 1.00);
+                vec3 gold = vec3(1.00, 0.82, 0.55);
+                vec3 tint = mix(cool, gold, smoothstep(0.78, 1.0, vSeed));
+
+                // Fake doppler: the leading end runs blue, the trail warms as it goes.
+                vec3 col = mix(tint, tint * vec3(1.20, 0.94, 0.76), vAlong);
+                col += vec3(core * 0.85 + spark * 1.3);
+
+                float alpha = (glow * 0.50 + core * 0.85 + spark * 0.6) * taper * vFade * uOpacity;
+                gl_FragColor = vec4(col, alpha);
+            }
+`,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        // The screen-space expansion winds every quad clockwise, so FrontSide
+        // (three's default) culls the entire field. Nothing to cull here anyway:
+        // these are flat, additive and never write depth.
+        side: THREE.DoubleSide
+    });
+
+    warpField = new THREE.Mesh(geo, mat);
+    warpField.frustumCulled = false;   // positions are computed on the GPU
+    warpField.visible = false;
+    warpField.renderOrder = 2;
+    scene.add(warpField);
+}
 
 function initScroll() {
     // Using IntersectionObserver to detect which section is active
@@ -609,7 +946,7 @@ function initScroll() {
                 // Trigger Camera Move
                 const planetKey = entry.target.dataset.planet;
                 if (planetKey && views[planetKey]) {
-                    targetView = views[planetKey];
+                    flyTo(planetKey);
 
                     // Highlight Content
                     document.querySelectorAll('section').forEach(s => s.classList.remove('active'));
@@ -688,16 +1025,108 @@ function animate(now = 0) {
         planetHorizon.style.transform = `translateY(${translateY}px) scale(${1 + eased * 0.35})`;
     }
 
-    // 4. Smooth Camera Interpolation (Only runs once cinematic ends)
+    // 4. Camera flight (only runs once the cinematic ends)
     if (!isIntroPlaying) {
-        // Frame-rate independent damping. `2.0 * dt` overshoots on slow frames
-        // and crawls on fast ones, which reads as stutter even at a good fps.
-        const damp = 1 - Math.exp(-2.0 * dt);
-        camPos.lerp(targetView.pos, damp);
-        camLook.lerp(targetView.lookAt, damp);
+        prevPos.copy(camPos);
 
-        camera.position.copy(camPos);
+        if (flight) {
+            flight.t += dt / flight.dur;
+            const clamped = Math.min(1, flight.t);
+            const e = easeFlight(clamped);
+
+            flight.posCurve.getPointAt(e, camPos);
+            flight.lookCurve.getPointAt(e, camLook);
+
+            // Roll into the turn, strongest through the middle of the arc.
+            const turn = Math.sin(clamped * Math.PI);
+            bank += (flight.bankDir * 0.11 * turn - bank) * (1 - Math.exp(-5 * dt));
+
+            if (flight.t >= 1) flight = null;
+        } else {
+            // Parked: a very slow orbital drift so the frame is never frozen.
+            const view = views[currentViewKey];
+            orbitPhase += dt * 0.18;
+            _a.subVectors(view.pos, view.lookAt)
+                .applyAxisAngle(WORLD_UP, Math.sin(orbitPhase) * 0.045)
+                .add(view.lookAt);
+            _a.y += Math.sin(orbitPhase * 0.7) * 1.2;
+
+            const settle = 1 - Math.exp(-1.6 * dt);
+            camPos.lerp(_a, settle);
+            camLook.lerp(view.lookAt, settle);
+            bank += (0 - bank) * (1 - Math.exp(-3 * dt));
+        }
+
+        // --- Velocity drives every speed effect below ---
+        camVel.subVectors(camPos, prevPos).divideScalar(Math.max(dt, 1e-4));
+        const speed = camVel.length();
+        // Asymmetric attack/release. Trails ignite hard but relax slowly, so the
+        // streaks stretch out and settle rather than blinking off at the dock -
+        // a symmetric filter here is the single thing that reads most "demo".
+        const targetWarp = smoothstep01(30, 380, speed);
+        warp += (targetWarp - warp) * (1 - Math.exp(-(targetWarp > warp ? 7.5 : 2.2) * dt));
+
+        // Forward / right basis for banking and parallax.
+        _fwd.subVectors(camLook, camPos).normalize();
+        _right.crossVectors(_fwd, WORLD_UP).normalize();
+
+        // Pointer parallax, suppressed while moving fast.
+        const parAmt = (1 - warp) * (1 - warp);
+        parX += (pointerX - parX) * (1 - Math.exp(-3 * dt));
+        parY += (pointerY - parY) * (1 - Math.exp(-3 * dt));
+
+        camera.position.copy(camPos)
+            .addScaledVector(_right, parX * 2.5 * parAmt)
+            .addScaledVector(WORLD_UP, -parY * 1.8 * parAmt);
+
+        // Bank the horizon by rotating the up vector around the view axis.
+        _camUp.copy(WORLD_UP).applyAxisAngle(_fwd, bank);
+        camera.up.copy(_camUp);
         camera.lookAt(camLook);
+
+        // FOV punch: widening the lens with speed is what makes the middle of a
+        // jump actually feel fast rather than just look fast.
+        const fov = BASE_FOV + warp * 16;
+        if (Math.abs(camera.fov - fov) > 0.02) {
+            camera.fov = fov;
+            camera.updateProjectionMatrix();
+        }
+
+        // Lift exposure at speed so highlights bloom out, and pull the starfield
+        // down so the streaks are unambiguously the subject.
+        renderer.toneMappingExposure = BASE_EXPOSURE + warp * 0.22;
+        starUniforms.warpFade.value = warp;
+
+        // Warp streaks. Length ramps super-linearly so the middle of a jump
+        // stretches hard while the ends stay calm.
+        if (warpField) {
+            warpField.visible = warp > 0.01;
+            if (warpField.visible) {
+                warpUniforms.uCam.value.copy(camera.position);
+                if (speed > 1) warpUniforms.uDir.value.copy(camVel).divideScalar(speed);
+                warpUniforms.uLen.value = 6 + Math.pow(warp, 1.45) * 210;
+                warpUniforms.uThick.value = 0.0022 + warp * 0.0018;
+                warpUniforms.uWarp.value = warp;
+                warpUniforms.uOpacity.value = warp;
+            }
+        }
+
+        // Park the veil's glow on the vanishing point, so the tunnel mouth sits
+        // where we're actually heading rather than dead centre during a turn.
+        if (speed > 1) {
+            _b.copy(camera.position).addScaledVector(camVel, 40 / speed).project(camera);
+            vanishX += ((_b.x * 0.5 + 0.5) * 100 - vanishX) * (1 - Math.exp(-5 * dt));
+            vanishY += ((-_b.y * 0.5 + 0.5) * 100 - vanishY) * (1 - Math.exp(-5 * dt));
+        }
+
+        // Speed vignette. Only touch CSSOM when it would visibly change.
+        if (Math.abs(warp - lastWarpVar) > 0.01) {
+            lastWarpVar = warp;
+            const rs = document.documentElement.style;
+            rs.setProperty('--warp', warp.toFixed(3));
+            rs.setProperty('--warp-x', vanishX.toFixed(1) + '%');
+            rs.setProperty('--warp-y', vanishY.toFixed(1) + '%');
+        }
     }
 
     renderer.render(scene, camera);
@@ -710,6 +1139,7 @@ function setCanvasHeight() {
     const h = window.innerHeight + EXTRA_HEIGHT;
 
     viewportH = window.innerHeight;
+    warpUniforms.uRes.value.set(w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
@@ -866,6 +1296,7 @@ function initSystem() {
         fragmentShader: `
             uniform float time;
             uniform float introProgress;
+            uniform float warpFade;
             varying vec3 vColor;
             varying float vPhase;
             void main() {
@@ -882,7 +1313,7 @@ function initSystem() {
                 float randOffset = fract(sin(vPhase * 123.456) * 789.123);
                 float introAlpha = smoothstep(randOffset * 0.8, randOffset * 0.8 + 0.2, introProgress);
 
-                gl_FragColor = vec4(vColor, alpha * twinkle * introAlpha);
+                gl_FragColor = vec4(vColor, alpha * twinkle * introAlpha * (1.0 - warpFade * 0.45));
             }
         `,
         transparent: true,
@@ -892,6 +1323,9 @@ function initSystem() {
 
     starField = new THREE.Points(starGeo, starMat);
     scene.add(starField);
+
+    // Warp streak field (invisible until the camera actually moves)
+    createWarpField();
 
     // Initialize Planets
     createEarth();
