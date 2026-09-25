@@ -502,7 +502,7 @@ section.active .content-block {
 .content-block:has(> p)::before {
     content: "";
     position: absolute;
-    inset: -14% -22%;
+    inset: -100% -100%;
     background: radial-gradient(ellipse 62% 58% at 30% 50%,
             rgba(3, 3, 5, 0.88) 0%,
             rgba(3, 3, 5, 0.62) 45%,
@@ -520,16 +520,25 @@ section.active .content-block {
 
 /* ============================================================
    CARD GRID
+   ------------------------------------------------------------
+   Panels read as dark glass lit from above by the same warm
+   light as the sun and horizon: a tan top edge, a warm wash on
+   hover, images that sit full-bleed and fade into the panel.
    ============================================================ */
+:root {
+    --panel-light: 205, 158, 122;              /* #CD9E7A — the sun's highlight tone */
+    --panel-bg-top: rgba(19, 16, 14, 0.88);
+    --panel-bg-bottom: rgba(10, 9, 9, 0.86);
+}
+
 .card-grid {
     pointer-events: auto;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
-    gap: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 24px;
     width: 100%;
     max-width: 1400px;
-    margin-top: 36px;
-    counter-reset: grid-counter;
+    margin-top: 40px;
     transform: translateY(30px);
     opacity: 0;
     transition: opacity 1s var(--ease-smooth), transform 1s var(--ease-smooth);
@@ -545,130 +554,96 @@ section.active .card-grid {
     position: relative;
     display: flex;
     flex-direction: column;
-    min-height: 320px;
-    padding: var(--panel-padding);
+    overflow: hidden;
     isolation: isolate;
 
-    background: var(--glass);
-    border: 1px solid var(--border-faint);
-    border-radius: 3px;
-    backdrop-filter: blur(14px) saturate(115%);
-    -webkit-backdrop-filter: blur(14px) saturate(115%);
+    background: linear-gradient(180deg, var(--panel-bg-top) 0%, var(--panel-bg-bottom) 100%);
+    border: 1px solid rgba(var(--panel-light), 0.10);
+    border-radius: 4px;
+    backdrop-filter: blur(16px) saturate(110%);
+    -webkit-backdrop-filter: blur(16px) saturate(110%);
     box-shadow:
-        inset 0 1px 0 0 var(--edge-light),
-        0 20px 44px -16px rgba(0, 0, 0, 0.85);
+        inset 0 1px 0 0 rgba(var(--panel-light), 0.16),
+        0 24px 48px -24px rgba(0, 0, 0, 0.9);
 
+    color: inherit;
     text-decoration: none;
-    counter-increment: grid-counter;
     transition:
-        transform 0.5s var(--ease-out),
-        background-color 0.4s var(--ease-smooth),
-        border-color 0.4s var(--ease-smooth),
+        border-color 0.5s var(--ease-smooth),
         box-shadow 0.5s var(--ease-smooth);
-    will-change: transform;
 }
 
-/* Warm light rakes in from the top edge on hover — the same
-   light source as the horizon flare behind it. */
+/* Warm light pooling in from the top edge on hover. */
 .glass-card::after {
     content: "";
     position: absolute;
     inset: 0;
-    border-radius: inherit;
-    background: linear-gradient(180deg, rgba(255, 210, 142, 0.09) 0%, transparent 38%);
+    background: radial-gradient(120% 55% at 50% 0%, rgba(var(--panel-light), 0.13) 0%, transparent 70%);
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.45s var(--ease-smooth);
-    z-index: 0;
+    transition: opacity 0.6s var(--ease-smooth);
+    z-index: 2;
 }
 
 .glass-card:hover,
-.glass-card:focus-visible {
-    border-color: var(--border-highlight);
-    background: var(--glass-hover);
-    transform: translateY(-5px);
+.glass-card:focus-visible,
+.glass-card:focus-within {
+    border-color: rgba(var(--panel-light), 0.28);
     box-shadow:
-        inset 0 1px 0 0 rgba(255, 255, 255, 0.18),
-        0 28px 56px -18px rgba(0, 0, 0, 0.95);
+        inset 0 1px 0 0 rgba(var(--panel-light), 0.34),
+        0 28px 60px -24px rgba(0, 0, 0, 0.95);
 }
 
 .glass-card:hover::after,
-.glass-card:focus-visible::after {
+.glass-card:focus-visible::after,
+.glass-card:focus-within::after {
     opacity: 1;
 }
 
-/* Log index. decimal-leading-zero keeps 01–99 correct;
-   the old "0" + counter broke at ten entries. */
-.glass-card::before {
-    content: counter(grid-counter, decimal-leading-zero);
-    position: absolute;
-    top: calc(var(--panel-padding) + 12px);
-    right: calc(var(--panel-padding) + 12px);
-    z-index: 3;
-    font-family: var(--font-mono);
-    font-size: var(--step--2);
-    font-weight: 500;
-    letter-spacing: 0.1em;
-    color: var(--starlight);
-    opacity: 0.55;
-    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.95);
-    transition: opacity 0.4s, color 0.4s;
-}
-
-.glass-card:hover::before {
-    opacity: 1;
-    color: var(--horizon-gold);
-}
-
-/* --- Card media --- */
+/* --- Card media: full-bleed, fading into the panel --- */
 .card-img-container {
     position: relative;
     width: 100%;
     aspect-ratio: 16 / 9;
-    max-height: 180px;
-    background: rgba(0, 0, 0, 0.35);
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 2px;
-    margin-bottom: 22px;
+    background: rgba(0, 0, 0, 0.4);
     overflow: hidden;
     flex-shrink: 0;
 }
 
 .card-img-container img {
+    display: block;
     width: 100%;
     height: 100%;
     object-fit: cover;
-    opacity: 0.72;
-    filter: grayscale(45%) contrast(105%);
-    transition: opacity 0.6s var(--ease-smooth), filter 0.6s var(--ease-smooth), transform 0.7s var(--ease-out);
+    opacity: 0.78;
+    filter: grayscale(40%) sepia(14%) brightness(0.9);
+    transition: opacity 0.7s var(--ease-smooth), filter 0.7s var(--ease-smooth), transform 1.2s var(--ease-out);
 }
 
-/* Grounds the image so it doesn't float as a bright rectangle. */
 .card-img-container::after {
     content: "";
     position: absolute;
     inset: 0;
-    background: linear-gradient(180deg, rgba(3, 3, 5, 0.35) 0%, transparent 40%, rgba(3, 3, 5, 0.55) 100%);
+    background: linear-gradient(180deg, rgba(19, 16, 14, 0) 40%, rgba(19, 16, 14, 0.55) 75%, rgb(19, 16, 14) 100%);
     pointer-events: none;
 }
 
 .glass-card:hover .card-img-container img,
-.glass-card:focus-visible .card-img-container img {
+.glass-card:focus-visible .card-img-container img,
+.glass-card:focus-within .card-img-container img {
     opacity: 1;
-    filter: grayscale(0%) contrast(100%);
-    transform: scale(1.06);
+    filter: none;
+    transform: scale(1.04);
 }
 
 /* --- Card text --- */
-/* Title follows the image immediately; the venue rule pins to the
-   card floor so it lines up across a row. Stretching the whole
-   text block down instead left a dead gap under short cards. */
 .card-content {
     position: relative;
-    z-index: 1;
+    z-index: 3;
     display: flex;
     flex-direction: column;
     flex: 1;
+    padding: 4px var(--panel-padding) 20px;
 }
 
 .card-title {
@@ -678,44 +653,43 @@ section.active .card-grid {
     line-height: 1.2;
     letter-spacing: -0.01em;
     color: var(--starlight);
-    margin-bottom: 10px;
-    transition: color 0.35s var(--ease-smooth);
-}
-
-.glass-card:hover .card-title {
-    color: #fff;
+    margin: 0 0 10px;
 }
 
 .card-desc {
     font-family: var(--font-body);
-    font-size: 0.875rem;
+    font-size: 0.9rem;
     font-weight: 300;
     color: var(--text);
     line-height: 1.6;
-    margin-bottom: 16px;
+    margin-bottom: 14px;
+    max-width: 60ch;
 }
 
 .card-authors {
-    font-family: var(--font-mono);
-    font-size: var(--step--1);
+    font-family: var(--font-body);
+    font-size: 0.8125rem;
     font-weight: 300;
     color: var(--muted);
-    margin-bottom: 18px;
     line-height: 1.6;
+    margin-bottom: 18px;
 }
 
 /* Own name: marked, not underlined. */
 .card-authors u {
     text-decoration: none;
     color: var(--starlight);
-    box-shadow: inset 0 -1px 0 0 rgba(255, 210, 142, 0.5);
+    font-weight: 400;
+    box-shadow: inset 0 -1px 0 0 rgba(var(--panel-light), 0.6);
 }
 
+/* Resource links share the site's underlined-link idiom
+   (.view-all, .contact-links) instead of boxed chips. */
 .card-actions {
     display: flex;
-    gap: 8px;
-    margin-bottom: 18px;
     flex-wrap: wrap;
+    gap: 8px 20px;
+    margin-bottom: 18px;
 }
 
 .card-meta {
@@ -726,8 +700,8 @@ section.active .card-grid {
     letter-spacing: var(--track-wide);
     color: var(--telemetry-blue);
     margin-top: auto;
-    padding-top: 15px;
-    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    padding-top: 14px;
+    border-top: 1px solid rgba(var(--panel-light), 0.10);
 }
 
 /* Quiet secondary link that sits under a section heading. */
@@ -788,19 +762,17 @@ section.active .card-grid {
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.14em;
-    color: var(--muted);
-    border: 1px solid var(--border-faint);
-    padding: 6px 11px;
+    color: var(--text);
     text-decoration: none;
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: 2px;
-    transition: color 0.3s, background-color 0.3s, border-color 0.3s;
+    padding: 3px 0 5px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+    transition: color 0.3s, border-color 0.3s;
 }
 
-.btn-small:hover {
-    background: var(--starlight);
-    color: var(--void);
-    border-color: var(--starlight);
+.btn-small:hover,
+.btn-small:focus-visible {
+    color: var(--horizon-gold);
+    border-color: rgba(255, 210, 142, 0.6);
 }
 
 .btn-primary {
