@@ -3,6 +3,10 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+// import { installRenderStyles } from "./render-styles.js";
+// import { createCubeMorph } from "./cube-planets.js";
+import { createMotion } from "./motion.js";
+import { loadSettings, createSettingsPanel } from "./settings.js";
 
 /* ============================================================
    MOBILE MENU
@@ -30,6 +34,18 @@ if (menuBtn && mobileMenu) {
 const IS_MOBILE = /Android|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(navigator.userAgent)
     || (navigator.maxTouchPoints > 1 && Math.min(window.innerWidth, window.innerHeight) < 900);
 const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// Saved display settings (graphics quality, readability), applied
+// before anything is measured or built.
+const settings = loadSettings();
+// During the intro the page's dark layers (the readability dim and the
+// glow behind text blocks) are clear, so the star and sun reveal is
+// seen at full brightness. They fade back in as the hero arrives.
+document.documentElement.classList.add("intro-clear");
+let lowQuality = settings.quality === "low";
+
+// Page-layer motion: smooth scroll, stardust, scroll-linked transitions.
+const motion = createMotion({ reducedMotion: REDUCED_MOTION, quality: settings.quality });
 
 // Tuned for a steady frame rate. Past 2x, extra pixels are invisible on
 // a moving 3D background but cost 2.25x the GPU work of 2x.
@@ -125,8 +141,12 @@ const renderer = new THREE.WebGLRenderer({
 });
 
 const PIXEL_RATIO = Math.min(window.devicePixelRatio || 1, MAX_DPR);
+// Low graphics: render the 3D scene at fewer pixels (it is soft and
+// moving, so the drop is hard to see but saves a lot of GPU work).
+const LOW_PIXEL_RATIO = Math.min(PIXEL_RATIO, IS_MOBILE ? 0.75 : 0.85);
+const pixelRatioFor = () => (lowQuality ? LOW_PIXEL_RATIO : PIXEL_RATIO);
 
-renderer.setPixelRatio(PIXEL_RATIO);
+renderer.setPixelRatio(pixelRatioFor());
 // Sharpest texture filtering the GPU supports, so planet surfaces stay crisp at glancing angles.
 const ANISO = Math.min(IS_MOBILE ? 4 : 8, renderer.capabilities.getMaxAnisotropy());
 renderer.setSize(window.innerWidth, window.innerHeight + EXTRA_HEIGHT);
@@ -148,7 +168,7 @@ const composerTarget = new THREE.WebGLRenderTarget(_drawSize.x, _drawSize.y, {
     samples: IS_MOBILE ? 0 : Math.min(4, renderer.capabilities.maxSamples || 4)
 });
 const composer = new EffectComposer(renderer, composerTarget);
-composer.setPixelRatio(PIXEL_RATIO);
+composer.setPixelRatio(pixelRatioFor());
 composer.setSize(window.innerWidth, window.innerHeight + EXTRA_HEIGHT);
 
 const renderPass = new RenderPass(scene, camera);
@@ -161,7 +181,17 @@ const bloomPass = new UnrealBloomPass(
 const outputPass = new OutputPass();
 composer.addPass(renderPass);
 composer.addPass(bloomPass);
+bloomPass.enabled = !lowQuality;
 composer.addPass(outputPass);
+
+// // Switchable rendering styles (post pass, must stay last).
+// // "Voxel" has no post effect; it turns the planets into cubes instead.
+// const cubeMorph = createCubeMorph({ texels: 24, segments: IS_MOBILE ? 32 : 48 });
+// const renderStyles = installRenderStyles({
+//     composer,
+//     reducedMotion: REDUCED_MOTION,
+//     onChange: (id, { instant }) => cubeMorph.setTarget(id === "voxel", instant)
+// });
 
 /* ============================================================
    INTRO STATE
@@ -192,13 +222,14 @@ loadingManager.onProgress = (url, loaded, total) => {
     if (progressBar) progressBar.style.width = (loaded / total) * 100 + '%';
 };
 
-loadingManager.onLoad = () => {
-    document.querySelectorAll('#hero .content-block, .planet-horizon').forEach(el => {
-        el.style.transition = 'none';
-    });
+// Textures and fonts must both be ready: the headlines are split into
+// lines, which needs the real font metrics.
+loadingManager.onLoad = () => motion.ready.then(startIntro);
+
+function startIntro() {
+    if (planetHorizon) planetHorizon.style.transition = 'none';
 
     gsap.set("nav", { y: -30, opacity: 0 });
-    gsap.set("#hero .content-block", { y: 30, opacity: 0 });
     gsap.set(".deco-line-vertical", { scaleY: 0, opacity: 0, transformOrigin: "top" });
     gsap.set(".sys-status", { x: 20, opacity: 0 });
     gsap.set(".hud-footer", { y: 20, opacity: 0 });
@@ -212,15 +243,15 @@ loadingManager.onLoad = () => {
         onComplete: () => {
             isIntroPlaying = false;
             document.documentElement.style.overflow = '';
-            document.querySelectorAll('#hero .content-block, .planet-horizon').forEach(el => {
-                el.style.transition = '';
-                el.style.transform = '';
-            });
-            gsap.set("#hero .content-block", { clearProps: "all" });
+            if (planetHorizon) {
+                planetHorizon.style.transition = '';
+                planetHorizon.style.transform = '';
+            }
             camPos.copy(camera.position);
             camLook.copy(introLookAt);
             prevPos.copy(camPos);
             initScroll();
+            motion.start();
         }
     });
 
@@ -260,14 +291,15 @@ loadingManager.onLoad = () => {
     // SYSTEM ONLINE — interface arrives as the camera settles.
       .to("#planet-horizon", { opacity: 0.6, scale: 1, duration: 1.5, ease: "power1.out" }, 5.0)
       .to("nav", { y: 0, opacity: 1, duration: 1.0, ease: "power1.out" }, 5.3)
-      .to("#hero .content-block", { y: 0, opacity: 1, duration: 1.0, ease: "power1.out" }, 5.5)
+      .add(motion.heroIntro(), 5.4)
+      .call(() => document.documentElement.classList.remove("intro-clear"), null, 5.8)
       .to(".deco-line-vertical", { scaleY: 1, opacity: 1, duration: 0.8, ease: "power1.out" }, 5.7)
       .to(".sys-status", { x: 0, opacity: 1, duration: 0.8, ease: "power1.out" }, 5.9)
       .to(".hud-footer", { y: 0, opacity: 1, duration: 0.8, ease: "power1.out" }, 6.1)
       .to(".scroll-indicator", { opacity: 0.5, duration: 1.0, ease: "power1.out" }, 6.3);
 
     if (REDUCED_MOTION) tl.progress(1);
-};
+}
 
 const textureLoader = new THREE.TextureLoader(loadingManager);
 const IMAGE_BASE = "static/img/";
@@ -1115,6 +1147,7 @@ function createWarpField() {
     warpField.visible = false;
     warpField.renderOrder = 4;
     scene.add(warpField);
+    setWarpDensity();
 }
 
 /* ============================================================
@@ -1172,6 +1205,7 @@ function animate() {
 
     if (starField) starField.rotation.y -= 0.004 * dt * motion;
     starUniforms.time.value += dt * motion;
+    // cubeMorph.update(dt);
     sunUniforms.uTime.value += dt * motion;
 
     // Horizon flare parallax
@@ -1257,6 +1291,37 @@ function animate() {
 }
 
 /* ============================================================
+   SETTINGS PANEL
+   ============================================================ */
+// Low graphics keeps the warp streaks but draws half of them.
+function setWarpDensity() {
+    if (!warpField) return;
+    const verts = warpField.geometry.attributes.position.count;   // 2 per streak
+    warpField.geometry.setDrawRange(0, lowQuality ? Math.floor(verts / 4) * 2 : verts);
+}
+
+function applyQuality(level) {
+    lowQuality = level === "low";
+    bloomPass.enabled = !lowQuality;
+    setWarpDensity();
+    renderer.setPixelRatio(pixelRatioFor());
+    composer.setPixelRatio(pixelRatioFor());
+    setCanvasHeight();
+}
+
+createSettingsPanel({
+    state: settings,
+    onChange: (key, value) => {
+        if (key === "quality") {
+            applyQuality(value);
+            motion.setQuality(value);
+        }
+        // Text colours changed: the stardust is sampled from them.
+        if (key === "readability") motion.refresh();
+    }
+});
+
+/* ============================================================
    RESIZE
    ============================================================ */
 function setCanvasHeight() {
@@ -1321,6 +1386,17 @@ function initSystem() {
     createMars();
     createJupiter();
     createSaturn();
+
+    // // Let the planets, their cloud layers and the sun morph into cubes.
+    // for (const p of Object.values(planets)) {
+    //     cubeMorph.add(p.mesh);
+    //     if (p.clouds) cubeMorph.add(p.clouds);
+    // }
+    // cubeMorph.addShader(sun, { dirVarying: "vObj" });
+    // scene.traverse((o) => {
+    //     const u = o.material && o.material.uniforms;
+    //     if (u && u.uShell && u.uIntensity) cubeMorph.fade(u.uIntensity);   // atmospheres
+    // });
 
     renderer.compile(scene, camera);
     animate();
