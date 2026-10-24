@@ -291,7 +291,7 @@ nav {
     transform-origin: left center;
 }
 
-/* --- Settings (button + panel, built by settings.js) --- */
+/* --- Settings (button + panel, built in app.js) --- */
 .nav-links {
     margin-left: auto;
 }
@@ -413,7 +413,6 @@ nav {
    Glass blur is one of the costliest effects to draw on top of a
    moving 3D scene; swap it for plain, more opaque panels. */
 .q-low nav,
-.q-low .orbit-hud,
 .q-low .mobile-menu,
 .q-low .settings-panel {
     backdrop-filter: none;
@@ -422,10 +421,6 @@ nav {
 
 .q-low nav {
     background: linear-gradient(180deg, rgba(3, 3, 5, 0.95) 0%, rgba(3, 3, 5, 0.6) 100%);
-}
-
-.q-low .orbit-hud {
-    background: rgba(3, 3, 5, 0.85);
 }
 
 /* --- Readability: high contrast ---
@@ -1297,7 +1292,7 @@ a {
 
 .hud-footer {
     position: absolute;
-    bottom: 38px;
+    bottom: 86px;     /* clear of the flight route below it */
     left: var(--gutter);
     display: flex;
     gap: 40px;
@@ -1441,7 +1436,7 @@ a {
    ------------------------------------------------------------
    Styles for the pieces motion.js adds: split lines, word and
    character spans, text-roll hovers, card scan lines and the
-   orbit readout.
+   flight route.
    ============================================================ */
 
 /* --- Lenis (smooth scroll) --- */
@@ -1568,66 +1563,304 @@ a:focus-visible .roll-inner {
     margin: -2.4rem -1.5rem;
 }
 
-/* --- Orbit readout --- */
-.orbit-hud {
+/* --- Flight route ---
+   A small ship flies along the bottom of the screen as you
+   scroll (motion.js, buildRoute). The track is laid out by
+   scroll distance: a long section is a long stretch of track.
+   Planets mark where the camera flies; labels name sections. */
+.route {
+    --route-side: clamp(20px, 3vw, 48px);
     position: fixed;
-    right: clamp(24px, 4vw, 48px);
-    bottom: 30px;
+    left: var(--route-side);
+    right: var(--route-side);
+    bottom: 14px;
     z-index: 60;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: 9px 14px;
+    height: 46px;
+    pointer-events: none;
+    opacity: 0;
+}
+
+/* Soft dark band along the bottom, so the route reads over
+   bright planets. */
+.route::before {
+    content: "";
+    position: absolute;
+    inset: -28px calc(-1 * var(--route-side)) -14px;
+    background: linear-gradient(to top,
+            rgba(3, 3, 5, 0.78) 0%,
+            rgba(3, 3, 5, 0.5) 55%,
+            rgba(3, 3, 5, 0) 100%);
+    z-index: -1;
+    pointer-events: none;
+}
+
+/* Click or drag along the track to travel. This strip takes the
+   pointer; the labels on top of it are buttons. */
+.route-hit {
+    position: absolute;
+    left: -10px;
+    right: -10px;
+    top: -14px;
+    height: 28px;
+    cursor: pointer;
+    pointer-events: auto;
+    touch-action: none;
+}
+
+.route.is-dragging .route-hit {
+    cursor: grabbing;
+}
+
+/* A small ring that follows the pointer along the track. */
+.route-ghost {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 9px;
+    height: 9px;
+    margin: -4.5px 0 0 -4.5px;
+    border: 1px solid var(--horizon-gold);
+    border-radius: 50%;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s var(--ease-smooth);
+}
+
+.route.is-hovering .route-ghost {
+    opacity: 0.85;
+}
+
+.route.is-hovering .route-line {
+    background: repeating-linear-gradient(90deg,
+            rgba(255, 255, 255, 0.4) 0 3px,
+            transparent 3px 8px);
+}
+
+.route-track {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 14px;
+    height: 0;
+}
+
+/* The path ahead: a dotted line. */
+.route-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -0.5px;
+    height: 1px;
+    background: repeating-linear-gradient(90deg,
+            rgba(255, 255, 255, 0.24) 0 3px,
+            transparent 3px 8px);
+}
+
+/* The path behind: a gold trail that ends at the ship. */
+.route-trail {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -0.5px;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(255, 210, 142, 0.05), var(--horizon-gold));
+    transform-origin: left center;
+    transform: scaleX(0);
+}
+
+/* Planets. Margins (not transforms) centre them, so a transform
+   is free for the small "pop" when the ship arrives. */
+.route-planet {
+    --s: 9px;
+    position: absolute;
+    top: 0;
+    width: var(--s);
+    height: var(--s);
+    margin: calc(var(--s) / -2) 0 0 calc(var(--s) / -2);
+    border-radius: 50%;
+    opacity: 0.6;
+    transition: opacity 0.5s var(--ease-smooth), box-shadow 0.5s var(--ease-smooth);
+}
+
+.route-planet.is-passed {
+    opacity: 1;
+}
+
+.route.is-hovering .route-planet {
+    opacity: 1;
+}
+
+.route-planet.is-current {
+    box-shadow: 0 0 0 3px rgba(255, 210, 142, 0.12), 0 0 12px 1px rgba(255, 210, 142, 0.45);
+}
+
+.route-planet[data-planet="overview"] {
+    --s: 12px;
+    opacity: 1;
+    background: radial-gradient(circle at 40% 40%, #FFF3D6, var(--horizon-gold) 55%, var(--horizon-red));
+    box-shadow: 0 0 10px 1px rgba(255, 210, 142, 0.5);
+}
+
+.route-planet[data-planet="earth"] {
+    --s: 9px;
+    background: radial-gradient(circle at 35% 35%, #D6E4F2, var(--telemetry-blue) 60%, #4D6A8C);
+}
+
+.route-planet[data-planet="mars"] {
+    --s: 7px;
+    background: radial-gradient(circle at 35% 35%, #F2B49E, var(--horizon-red) 60%, #8A3D2A);
+}
+
+.route-planet[data-planet="jupiter"] {
+    --s: 14px;
+    background: linear-gradient(180deg,
+            #EBD3AE 0 24%, #C59A70 24% 36%, #F0DFC2 36% 58%,
+            #B98A63 58% 70%, #E3C7A0 70%);
+}
+
+.route-planet[data-planet="saturn"] {
+    --s: 10px;
+    background: radial-gradient(circle at 40% 35%, #F6E7C4, #CDB184);
+}
+
+.route-planet[data-planet="saturn"]::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 22px;
+    height: 6px;
+    border: 1px solid rgba(255, 210, 142, 0.75);
+    border-radius: 50%;
+    transform: translate(-50%, -50%) rotate(-16deg);
+}
+
+/* A section that stays at the same planet gets a small tick. */
+.route-tick {
+    position: absolute;
+    top: -3px;
+    width: 1px;
+    height: 6px;
+    margin-left: -0.5px;
+    background: rgba(255, 255, 255, 0.35);
+    transition: background 0.4s;
+}
+
+.route-tick.is-passed {
+    background: var(--horizon-gold);
+}
+
+/* Section names under the track, as buttons. Labels are nudged
+   apart so they never overlap (motion.js). Only when the screen
+   is too narrow for all of them are some hidden; the current one
+   always shows. */
+.route-label {
+    position: absolute;
+    top: 8px;
+    left: 0;
+    padding: 5px 0;
+    margin: 0;
+    background: none;
+    border: 0;
+    cursor: pointer;
+    pointer-events: auto;
     font-family: var(--font-mono);
     font-size: var(--step--2);
     font-weight: 500;
     letter-spacing: var(--track-wide);
     text-transform: uppercase;
-    color: var(--muted);
-    background: rgba(3, 3, 5, 0.55);
-    border: 1px solid var(--border-faint);
-    border-radius: 2px;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    pointer-events: none;
-    opacity: 0;
-}
-
-.orbit-index {
-    color: var(--starlight);
     white-space: nowrap;
+    color: var(--muted);
+    text-shadow: 0 0 10px rgba(3, 3, 5, 0.95), 0 1px 3px rgba(3, 3, 5, 0.9);
+    transition: color 0.4s var(--ease-smooth), opacity 0.4s var(--ease-smooth);
 }
 
-.oi-mask {
-    display: inline-block;
-    overflow: hidden;
-    vertical-align: top;
+.route-label:hover,
+.route-label.is-hover {
+    color: var(--starlight);
 }
 
-.oi-cur {
-    display: inline-block;
+.route-label.is-current {
     color: var(--horizon-gold);
 }
 
-.orbit-track {
-    position: relative;
-    width: 64px;
-    height: 1px;
-    background: rgba(255, 255, 255, 0.12);
-    overflow: hidden;
+.route-label.is-hidden {
+    opacity: 0;
+    pointer-events: none;
 }
 
-.orbit-fill {
+.route-label.is-hidden:focus-visible {
+    opacity: 1;
+}
+
+/* The ship. Three layers: position along the track (set by
+   motion.js), facing (flips when you scroll back up), and a
+   gentle bob. */
+.route-ship {
     position: absolute;
-    inset: 0;
-    background: var(--horizon-gold);
-    transform-origin: left center;
-    transform: scaleX(0);
+    left: 0;
+    top: 0;
+    width: 38px;
+    height: 22px;
+    margin: -11px 0 0 -19px;
+    pointer-events: none;
+    will-change: transform;
 }
 
-.orbit-name {
-    min-width: 19ch;
-    white-space: nowrap;
+.route-ship-flip,
+.route-ship-bob {
+    width: 100%;
+    height: 100%;
+}
+
+.route-ship-flip {
+    transition: transform 0.5s var(--ease-out);
+}
+
+.route-ship.is-back .route-ship-flip {
+    transform: scaleX(-1);
+}
+
+.route-ship-bob {
+    animation: shipBob 2.6s ease-in-out infinite;
+}
+
+@keyframes shipBob {
+    0%, 100% { transform: translateY(-1.5px) rotate(-2deg); }
+    50% { transform: translateY(1.5px) rotate(2deg); }
+}
+
+.route-ship svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+}
+
+.ship-body { fill: var(--starlight); }
+.ship-trim { fill: var(--horizon-red); }
+.ship-window { fill: var(--telemetry-blue); stroke: #2B3444; stroke-width: 1.2; }
+.ship-shine { fill: #FFFFFF; opacity: 0.85; }
+.ship-flame-out { fill: var(--horizon-red); }
+.ship-flame-in { fill: var(--horizon-gold); }
+
+/* The flame grows with scroll speed (--thrust, set by motion.js)
+   and flickers on its own. */
+.ship-flame {
+    transform-box: fill-box;
+    transform-origin: 100% 50%;
+    transform: scaleX(var(--thrust, 0.3));
+}
+
+.ship-flicker {
+    transform-box: fill-box;
+    transform-origin: 100% 50%;
+    animation: flameFlicker 0.14s ease-in-out infinite alternate;
+}
+
+@keyframes flameFlicker {
+    from { transform: scaleY(0.8); opacity: 0.85; }
+    to { transform: scaleY(1.1); opacity: 1; }
 }
 
 /* ============================================================
@@ -1776,17 +2009,16 @@ a:focus-visible .roll-inner {
         padding-left: calc(0.12em + 1.2em);
     }
 
-    /* Readout shrinks to index + progress; it fades in after the
-       hero so it never sits on the swipe cue. */
-    .orbit-hud {
-        right: 16px;
-        bottom: 20px;
-        padding: 7px 10px;
-        gap: 10px;
+    /* The route spans the screen. It fades in after the hero,
+       so it never sits on the swipe cue (motion.js). */
+    .route {
+        --route-side: 16px;
+        bottom: 10px;
     }
 
-    .orbit-name {
-        display: none;
+    /* Tighter letters, so all six labels fit on a phone. */
+    .route-label {
+        letter-spacing: 0.06em;
     }
 }
 
@@ -1824,6 +2056,10 @@ a:focus-visible .roll-inner {
     .paper-row:hover .paper-thumb img,
     .tile:hover .tile-media img {
         transform: none;
+    }
+    .route-ship-bob,
+    .ship-flicker {
+        animation: none;
     }
 }
 
@@ -1866,4 +2102,421 @@ html.custom-scrollbar::-webkit-scrollbar {
 
 .scrollbar.is-dragging .scrollbar-thumb {
     background: var(--horizon-gold);
+}
+
+/* ============================================================
+   ABOUT — a biography in short scenes (the ABOUT code in motion.js)
+   ------------------------------------------------------------
+   Default (no script, or reduced motion): the scenes stack as a
+   readable list, one chunk after another.
+
+   the ABOUT code in motion.js adds .about-pinned: the section grows to several
+   screens, the stage sticks to the viewport, and all scenes
+   share one grid cell so they play in turn in the same spot.
+   ============================================================ */
+
+#about .content-block {
+    max-width: 720px;
+}
+
+/* Label reads left to right here, with the counter opposite. */
+#about .section-label {
+    flex-direction: row;
+    margin-bottom: 0;
+}
+
+#about .section-line {
+    background: linear-gradient(90deg, var(--horizon-gold), rgba(255, 210, 142, 0.15));
+}
+
+.about-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: clamp(28px, 5vh, 52px);
+}
+
+/* --- Scene counter (only when pinned) --- */
+.about-count {
+    display: none;
+    align-items: center;
+    gap: 12px;
+    font-family: var(--font-mono);
+    font-size: var(--step--2);
+    font-weight: 500;
+    letter-spacing: var(--track-wide);
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+.about-count-mask {
+    display: inline-block;
+    overflow: hidden;
+    vertical-align: top;
+}
+
+.about-count-cur {
+    display: inline-block;
+    color: var(--horizon-gold);
+}
+
+.about-count-track {
+    position: relative;
+    width: 48px;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.12);
+    overflow: hidden;
+}
+
+.about-count-fill {
+    position: absolute;
+    inset: 0;
+    background: var(--horizon-gold);
+    transform-origin: left center;
+    transform: scaleX(0);
+}
+
+/* --- Scenes --- */
+.about-scene + .about-scene {
+    margin-top: clamp(64px, 11vh, 120px);
+}
+
+.about-kicker {
+    margin-bottom: 18px;
+    font-family: var(--font-mono);
+    font-size: var(--step--2);
+    font-weight: 500;
+    letter-spacing: var(--track-mega);
+    text-transform: uppercase;
+    color: var(--horizon-gold);
+}
+
+/* The big greeting. Its box hugs the text, so it scales up from
+   the middle of the words when it leaves (the ABOUT code in motion.js). */
+.about-hello {
+    width: fit-content;
+    transform-origin: 50% 55%;
+    margin: 0 0 clamp(26px, 4vh, 40px);
+    font-family: var(--font-heading);
+    font-size: clamp(3.2rem, 1.2rem + 6.4vw, 7.6rem);
+    font-weight: 400;
+    line-height: 0.95;
+    letter-spacing: -0.02em;
+    color: var(--starlight);
+}
+
+.about-name {
+    position: relative;
+    display: inline-block;
+}
+
+.about-squiggle {
+    position: absolute;
+    left: 4%;
+    bottom: -0.2em;
+    width: 92%;
+    height: auto;
+    overflow: visible;
+}
+
+.about-squiggle path {
+    fill: none;
+    stroke: var(--horizon-gold);
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
+}
+
+/* Headline of each chunk. */
+.about-title {
+    margin: 0 0 22px;
+    max-width: 17ch;
+    font-family: var(--font-heading);
+    font-size: clamp(2rem, 1.2rem + 2.4vw, 3.6rem);
+    font-weight: 400;
+    line-height: 1.06;
+    letter-spacing: -0.015em;
+    color: var(--starlight);
+}
+
+.about-body {
+    max-width: 46ch;
+}
+
+/* Last scene: a quieter lead-in, then the big line. */
+.about-lead {
+    margin-bottom: 20px;
+    max-width: 32ch;
+    font-family: var(--font-heading);
+    font-size: clamp(1.25rem, 1rem + 0.9vw, 1.75rem);
+    font-weight: 400;
+    line-height: 1.3;
+    color: var(--starlight);
+}
+
+.about-big {
+    width: fit-content;
+    transform-origin: 50% 60%;
+    margin: 0 0 24px;
+    max-width: 13ch;
+    font-family: var(--font-heading);
+    font-size: clamp(2.6rem, 1.2rem + 4.4vw, 5.6rem);
+    font-weight: 400;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--starlight);
+}
+
+.about-cta {
+    margin-top: clamp(24px, 4vh, 40px);
+}
+
+/* Split spans (the ABOUT code in motion.js). */
+.aw {
+    display: inline-block;
+}
+
+.about-hello .aw {
+    white-space: nowrap;
+}
+
+.ac {
+    display: inline-block;
+    transform-origin: 50% 80%;
+}
+
+.read-high main :is(.about-title, .about-hello, .about-big) {
+    text-shadow: 0 0 18px rgba(3, 3, 5, 0.9);
+}
+
+/* ============================================================
+   PINNED (the ABOUT code in motion.js adds .about-pinned)
+   ============================================================ */
+#about.about-pinned {
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+/* The track: one screen for the stage plus scroll room for the
+   scenes. svh, so the phone toolbar does not change it. */
+.about-pinned .content-block {
+    width: 100%;
+    max-width: none;
+    height: calc(100vh + (var(--scenes, 6) + 0.5) * 110vh);
+    height: calc(100svh + (var(--scenes, 6) + 0.5) * 110svh);
+    pointer-events: none;   /* drag-to-look still works over the stage */
+}
+
+.about-pinned .about-stage {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    height: 100svh;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.about-pinned .about-frame {
+    position: relative;
+    width: min(720px, 100%);
+}
+
+/* Soft dark field behind the text, so it reads over Earth. */
+.about-pinned .about-frame::before {
+    content: "";
+    position: absolute;
+    inset: -40% -45%;
+    background: radial-gradient(ellipse 58% 52% at 50% 50%,
+            rgba(3, 3, 5, 0.86) 0%,
+            rgba(3, 3, 5, 0.58) 45%,
+            rgba(3, 3, 5, 0) 76%);
+    z-index: -1;
+    pointer-events: none;
+}
+
+.about-pinned .about-count {
+    display: flex;
+}
+
+.about-pinned .about-scenes {
+    display: grid;
+}
+
+.about-pinned .about-scene {
+    grid-area: 1 / 1;
+    align-self: center;
+    margin-top: 0;
+    transform-origin: 0% 50%;
+}
+
+.about-scene a {
+    pointer-events: auto;
+}
+
+.about-pinned .about-scene:not(.is-current) a {
+    pointer-events: none;
+}
+
+@media (max-width: 768px) {
+    .about-pinned .about-stage {
+        justify-content: flex-start;
+    }
+
+    .about-title,
+    .about-big {
+        max-width: none;
+    }
+}
+
+/* ============================================================
+   SOUND BUTTON (built by audio.js)
+   ------------------------------------------------------------
+   Four small bars and a label in the nav. The bars sit still
+   when sound is off and dance when it is on. After the intro a
+   small bubble says "Click for sound" for a few seconds.
+   ============================================================ */
+
+.sound {
+    position: relative;
+    margin-left: clamp(22px, 2.8vw, 40px);
+}
+
+.sound-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 4px 0 5px;
+    background: none;
+    border: 0;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+    letter-spacing: var(--track-wide);
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: color 0.35s var(--ease-smooth);
+}
+
+.sound-btn:hover,
+.sound.is-on .sound-btn {
+    color: var(--starlight);
+}
+
+.sound-bars {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 11px;
+}
+
+.sound-bars i {
+    display: block;
+    width: 2px;
+    height: 3px;
+    background: currentColor;
+    border-radius: 1px;
+    transition: height 0.4s var(--ease-out), background 0.3s;
+}
+
+.sound.is-on .sound-bars i {
+    background: var(--horizon-gold);
+    animation: soundBar 1.1s ease-in-out infinite alternate;
+}
+
+.sound.is-on .sound-bars i:nth-child(2) { animation-duration: 0.8s; animation-delay: -0.3s; }
+.sound.is-on .sound-bars i:nth-child(3) { animation-duration: 1.3s; animation-delay: -0.6s; }
+.sound.is-on .sound-bars i:nth-child(4) { animation-duration: 0.95s; animation-delay: -0.2s; }
+
+@keyframes soundBar {
+    0% { height: 3px; }
+    100% { height: 11px; }
+}
+
+/* "Click for sound" bubble */
+.sound-hint {
+    position: absolute;
+    top: calc(100% + 14px);
+    left: 50%;
+    padding: 7px 11px;
+    font-family: var(--font-mono);
+    font-size: var(--step--2);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--void);
+    background: var(--horizon-gold);
+    border-radius: 2px;
+    pointer-events: none;
+    opacity: 0;
+    transform: translate(-50%, -6px);
+    transition: opacity 0.5s var(--ease-smooth), transform 0.6s var(--ease-out);
+}
+
+.sound-hint::before {
+    content: "";
+    position: absolute;
+    top: -4px;
+    left: 50%;
+    width: 8px;
+    height: 8px;
+    background: inherit;
+    transform: translateX(-50%) rotate(45deg);
+}
+
+.sound-hint.is-visible {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+
+@media (max-width: 768px) {
+    .sound {
+        margin-left: auto;
+    }
+
+    .sound + .settings {
+        margin-left: 18px;
+    }
+
+    .sound-label {
+        display: none;
+    }
+
+    .sound-bars {
+        height: 14px;
+    }
+
+    .sound.is-on .sound-bars i {
+        width: 2px;
+    }
+
+    @keyframes soundBar {
+        0% { height: 3px; }
+        100% { height: 14px; }
+    }
+
+    .sound-hint {
+        left: auto;
+        right: -8px;
+        transform: translate(0, -6px);
+    }
+
+    .sound-hint.is-visible {
+        transform: none;
+    }
+
+    .sound-hint::before {
+        left: auto;
+        right: 12px;
+        transform: rotate(45deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sound.is-on .sound-bars i {
+        animation: none;
+        height: 8px;
+    }
 }

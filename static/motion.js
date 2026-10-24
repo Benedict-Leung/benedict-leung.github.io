@@ -8,7 +8,10 @@
    - Stardust (stardust.js): every section gathers out of dust
      at the bottom edge of the screen, is solid in between, and
      breaks back into dust at the top edge.
-   - A small orbit readout tracks which planet you are at.
+   - A small ship flies along a route at the bottom of the
+     screen, past each planet, as you scroll.
+   - The About section plays as pinned scenes (ABOUT, at the
+     end of this file).
    - The nav steps aside while you read; buttons and links roll
      their labels on hover; in-page links glide.
 
@@ -39,13 +42,20 @@ const EXPO_IN_OUT = (t) =>
         : t < 0.5 ? Math.pow(2, 20 * t - 10) / 2
             : (2 - Math.pow(2, -20 * t + 10)) / 2;
 
-const ORBITS = {
-    overview: "SOL // SYSTEM VIEW",
-    earth: "EARTH // 1.00 AU",
-    mars: "MARS // 1.52 AU",
-    jupiter: "JUPITER // 5.20 AU",
-    saturn: "SATURN // 9.58 AU"
-};
+// The ship on the flight route (nose to the right). Colours come
+// from app.css (.ship-*), so it follows the site palette.
+const SHIP = `<div class="route-ship-flip"><div class="route-ship-bob"><svg viewBox="0 0 34 20" aria-hidden="true" focusable="false">
+<g class="ship-flame"><g class="ship-flicker">
+<path class="ship-flame-out" d="M7.5 7 C3 7.5 -0.5 8.8 -3.5 10 C-0.5 11.2 3 12.5 7.5 13 Z"/>
+<path class="ship-flame-in" d="M7.5 8.3 C4.5 8.7 2.3 9.4 0.8 10 C2.3 10.6 4.5 11.3 7.5 11.7 Z"/>
+</g></g>
+<path class="ship-trim" d="M10.5 6 L7 1.9 Q6.4 1 7.5 1.3 L14.5 5 Z"/>
+<path class="ship-trim" d="M10.5 14 L7 18.1 Q6.4 19 7.5 18.7 L14.5 15 Z"/>
+<path class="ship-body" d="M6.5 10 C6.5 6.2 10 4.6 17 4.6 C23.5 4.6 28.5 6.6 31.5 10 C28.5 13.4 23.5 15.4 17 15.4 C10 15.4 6.5 13.8 6.5 10 Z"/>
+<path class="ship-trim" d="M25.5 6.3 C28 7.2 30 8.4 31.5 10 C30 11.6 28 12.8 25.5 13.7 C26.4 12.6 26.9 11.3 26.9 10 C26.9 8.7 26.4 7.4 25.5 6.3 Z"/>
+<circle class="ship-window" cx="19" cy="10" r="3.1"/>
+<circle class="ship-shine" cx="18" cy="9" r="0.9"/>
+</svg></div></div>`;
 
 /* ------------------------------------------------------------
    Text splitting
@@ -307,6 +317,10 @@ export function createMotion({ reducedMotion = false, quality = "high" } = {}) {
 
     document.querySelectorAll(".btn-primary, .btn-small, .nav-links a, .contact-links a, .view-all").forEach(addTextRoll);
 
+    // About: the biography as pinned scenes (ABOUT, below). Done before the
+    // stardust is sampled, because it makes the section taller.
+    const about = prepareAbout({ animate });
+
     // Stardust needs WebGL; reduced motion gets plain content.
     const dust = animate ? createStardust({ roots: topBlocks, quality }) : null;
     if (dust) {
@@ -321,7 +335,7 @@ export function createMotion({ reducedMotion = false, quality = "high" } = {}) {
         const viewAll = block.querySelector(":scope > .section-head > .view-all");
         if (viewAll) out.push(viewAll);
         [...block.children].forEach((c) => {
-            if (c.matches(".section-head, .content-block, br, .scrub-text, .pub-index, .pub-head, .gallery")) return;
+            if (c.matches(".section-head, .content-block, br, .scrub-text, .pub-index, .pub-head, .gallery, .about-stage")) return;
             if (c.matches(".contact-links")) out.push(...c.children);
             else out.push(c);
         });
@@ -330,7 +344,8 @@ export function createMotion({ reducedMotion = false, quality = "high" } = {}) {
 
     function splitAll() {
         // The capabilities statement keeps its first-line indent, so it is not split.
-        document.querySelectorAll("main h1, main h2:not(.statement)").forEach((h) => {
+        // Headings with data-reveal are split by the ABOUT code instead.
+        document.querySelectorAll("main h1, main h2:not(.statement):not([data-reveal])").forEach((h) => {
             splitLines(h, { chars: fallback && !!h.closest("#contact") });
         });
         if (fallback) document.querySelectorAll(".scrub-text").forEach((p) => flattenWords(p, false));
@@ -453,7 +468,7 @@ export function createMotion({ reducedMotion = false, quality = "high" } = {}) {
             onEnter: (batch) => gsap.to(batch, { opacity: 1, y: 0, duration: 1.1, ease: "expo.out", stagger: 0.1 })
         });
 
-        document.querySelectorAll("main h2").forEach((h2) => {
+        document.querySelectorAll("main h2:not([data-reveal])").forEach((h2) => {
             if (h2.closest("#contact")) return;
             const words = h2.querySelectorAll(".w");
             const st = { trigger: h2, start: "top bottom", end: "top 30%", scrub: 0.8, invalidateOnRefresh: true };
@@ -505,50 +520,289 @@ export function createMotion({ reducedMotion = false, quality = "high" } = {}) {
         update();
     }
 
+    /* --- Flight route ---------------------------------------- */
+
+    // A small ship flies along the bottom of the screen. Each section
+    // takes the share of the track that it takes of the page's scroll,
+    // so a long section (About) is a long stretch. A section that flies
+    // to a new planet starts with that planet; a section that stays at
+    // the same planet (Skills, at Earth) starts with a small tick.
+    // The labels under the track name the sections.
+    //
+    // It is also a way to travel: click a label to fly to that section,
+    // click the track to fly to that point, or drag along it to scrub.
+    function buildRoute() {
+        const root = document.querySelector(".route");
+        if (!root || !sections.length) return;
+        root.innerHTML =
+            '<div class="route-track">' +
+            '<div class="route-line" aria-hidden="true"></div>' +
+            '<div class="route-trail" aria-hidden="true"></div>' +
+            '</div>';
+        const track = root.querySelector(".route-track");
+        const trail = root.querySelector(".route-trail");
+
+        // Label: data-route on the section, else its nav link text.
+        const nameOf = (s) => {
+            if (s.dataset.route) return s.dataset.route;
+            const a = document.querySelector(`.nav-links a[href="#${s.id}"]`);
+            return a ? (a.getAttribute("aria-label") || a.textContent).trim() : s.id;
+        };
+
+        const stops = sections.map((s, i) => {
+            const planet = s.dataset.planet;
+            const isPlanet = i === 0 || planet !== sections[i - 1].dataset.planet;
+            const mark = document.createElement("span");
+            mark.className = isPlanet ? "route-planet" : "route-tick";
+            mark.setAttribute("aria-hidden", "true");
+            if (isPlanet) mark.dataset.planet = planet;
+            track.appendChild(mark);
+            return { section: s, mark, isPlanet, name: nameOf(s), start: 0, target: 0, x: 0, w: 0, ideal: 0, left: 0 };
+        });
+        // Each stop remembers the planet stop it belongs to.
+        stops.forEach((st, i) => { st.home = st.isPlanet ? st : stops[i - 1].home; });
+
+        const ship = document.createElement("div");
+        ship.className = "route-ship";
+        ship.setAttribute("aria-hidden", "true");
+        ship.innerHTML = SHIP;
+        const ghost = document.createElement("span");
+        ghost.className = "route-ghost";
+        ghost.setAttribute("aria-hidden", "true");
+        const hit = document.createElement("div");
+        hit.className = "route-hit";
+        hit.setAttribute("aria-hidden", "true");
+        track.append(ship, ghost, hit);
+
+        // Labels are buttons, on top of the click strip.
+        stops.forEach((st) => {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.className = "route-label";
+            b.textContent = st.name;
+            b.addEventListener("click", () => glideTo(st.target));
+            track.appendChild(b);
+            st.label = b;
+        });
+
+        let max = 1, width = 1, active = -1;
+
+        // A section starts when its top reaches 55% of the screen, the
+        // same line the camera uses to fly to the next planet. Clicking
+        // it lands with the section top at the top of the screen, the
+        // same place the nav links land.
+        function measure() {
+            const vh = window.innerHeight;
+            max = Math.max(1, document.documentElement.scrollHeight - vh);
+            width = track.offsetWidth || 1;
+            stops.forEach((st, i) => {
+                const top = st.section.getBoundingClientRect().top + window.scrollY;
+                st.start = i === 0 ? 0 : Math.min(max, Math.max(0, top - vh * 0.55));
+                st.target = i === 0 ? 0 : Math.min(max, Math.max(0, top));
+                st.x = (st.start / max) * width;
+                st.mark.style.left = `${st.x.toFixed(1)}px`;
+                st.w = st.label.offsetWidth;
+                st.ideal = Math.min(width - st.w, Math.max(0, st.x - st.w / 2));
+            });
+            placeLabels();
+        }
+
+        // Short sections sit close together (Home and About, Projects and
+        // Contact), so their labels would overlap. Each label sits under
+        // its stop when it can, and is nudged sideways when it must, so
+        // every label shows. Only when the screen is too narrow for all
+        // of them do some hide; the current one always shows.
+        const LABEL_GAP = 12;
+        function placeLabels() {
+            const total = stops.reduce((n, st) => n + st.w, 0) + LABEL_GAP * (stops.length - 1);
+            if (total <= width) {
+                let edge = -Infinity;          // left to right: no overlaps
+                stops.forEach((st) => { st.left = Math.max(st.ideal, edge); edge = st.left + st.w + LABEL_GAP; });
+                edge = width;                  // right to left: stay on the track
+                for (let i = stops.length - 1; i >= 0; i--) {
+                    stops[i].left = Math.min(stops[i].left, edge - stops[i].w);
+                    edge = stops[i].left - LABEL_GAP;
+                }
+                stops.forEach((st) => {
+                    st.label.style.left = `${st.left.toFixed(1)}px`;
+                    st.label.classList.remove("is-hidden");
+                });
+                return;
+            }
+            const shown = [];
+            const clear = (a, b) => b.ideal >= a.ideal + a.w + LABEL_GAP;
+            stops.forEach((st, i) => {
+                st.label.style.left = `${st.ideal.toFixed(1)}px`;
+                const last = shown[shown.length - 1];
+                if (!last || clear(last, st)) shown.push(st);
+                else if (i === active) {
+                    while (shown.length && !clear(shown[shown.length - 1], st)) shown.pop();
+                    shown.push(st);
+                }
+            });
+            stops.forEach((st) => st.label.classList.toggle("is-hidden", !shown.includes(st)));
+        }
+
+        const stopAt = (y) => {
+            let i = 0;
+            while (i + 1 < stops.length && y >= stops[i + 1].start - 1) i++;
+            return i;
+        };
+
+        function setActive(i) {
+            const forward = i > active;
+            active = i;
+            const home = stops[i].home;
+            stops.forEach((st, k) => {
+                st.mark.classList.toggle("is-passed", k <= i);
+                st.label.classList.toggle("is-current", k === i);
+                if (k === i) st.label.setAttribute("aria-current", "location");
+                else st.label.removeAttribute("aria-current");
+                if (st.isPlanet) st.mark.classList.toggle("is-current", st === home);
+            });
+            placeLabels();
+            // Arriving at a new planet: it pops a little.
+            if (animate && forward && stops[i].isPlanet && i > 0) {
+                gsap.fromTo(stops[i].mark, { scale: 1.9 }, { scale: 1, duration: 0.7, ease: "expo.out", overwrite: true });
+            }
+        }
+
+        /* Travel ------------------------------------------------ */
+
+        // A long, eased flight (like the nav links) for clicks.
+        function glideTo(y) {
+            y = Math.min(max, Math.max(0, y));
+            if (lenis) lenis.scrollTo(y, { duration: 2, easing: EXPO_IN_OUT });
+            else window.scrollTo({ top: y, behavior: animate ? "smooth" : "auto" });
+        }
+        // A quick follow for dragging.
+        function followTo(y) {
+            y = Math.min(max, Math.max(0, y));
+            if (lenis) lenis.scrollTo(y, { lerp: 0.2 });
+            else window.scrollTo(0, y);
+        }
+
+        const xOf = (e) => Math.min(width, Math.max(0, e.clientX - track.getBoundingClientRect().left));
+        // Clicks near a planet or tick snap to that section.
+        const SNAP = 12;
+        const yOf = (x, snap) => {
+            if (snap) {
+                const near = stops.find((st) => Math.abs(st.x - x) <= SNAP);
+                if (near) return near.target;
+            }
+            return (x / width) * max;
+        };
+
+        let hoverStop = -1;
+        function hover(x) {
+            ghost.style.transform = `translate3d(${x.toFixed(1)}px, 0, 0)`;
+            const i = stopAt(yOf(x, false));
+            if (i === hoverStop) return;
+            if (hoverStop >= 0) stops[hoverStop].label.classList.remove("is-hover");
+            stops[i].label.classList.add("is-hover");
+            hoverStop = i;
+        }
+        function unhover() {
+            root.classList.remove("is-hovering");
+            if (hoverStop >= 0) stops[hoverStop].label.classList.remove("is-hover");
+            hoverStop = -1;
+        }
+
+        let drag = null;
+        hit.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") root.classList.add("is-hovering"); });
+        hit.addEventListener("pointerleave", () => { if (!drag) unhover(); });
+        hit.addEventListener("pointerdown", (e) => {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            hit.setPointerCapture(e.pointerId);
+            drag = { x0: e.clientX, moved: false };
+        });
+        hit.addEventListener("pointermove", (e) => {
+            const x = xOf(e);
+            if (e.pointerType === "mouse") hover(x);
+            if (!drag) return;
+            if (!drag.moved && Math.abs(e.clientX - drag.x0) > 4) {
+                drag.moved = true;
+                root.classList.add("is-dragging");
+            }
+            if (drag.moved) followTo(yOf(x, false));
+        });
+        const endDrag = (e) => {
+            if (!drag) return;
+            // A click (no drag): fly there, snapping to a nearby stop.
+            if (!drag.moved && e.type === "pointerup") glideTo(yOf(xOf(e), true));
+            drag = null;
+            root.classList.remove("is-dragging");
+            if (e.pointerType !== "mouse") unhover();
+        };
+        hit.addEventListener("pointerup", endDrag);
+        hit.addEventListener("pointercancel", endDrag);
+
+        /* Every frame ------------------------------------------- */
+
+        // Place the ship and trail, set the flame from the scroll speed,
+        // and turn the ship to face the way you scroll.
+        let thrust = 0.3, back = false, lastY = window.scrollY;
+        function frame(time, deltaMs) {
+            const y = window.scrollY;
+            const dt = Math.max(1, deltaMs || 16) / 1000;
+            const v = (y - lastY) / dt;       // px per second
+            lastY = y;
+
+            const p = Math.min(1, Math.max(0, y / max));
+            ship.style.transform = `translate3d(${(p * width).toFixed(1)}px, 0, 0)`;
+            trail.style.transform = `scaleX(${p.toFixed(4)})`;
+
+            const target = animate ? 0.3 + Math.min(1, Math.abs(v) / 2200) * 0.9 : 0.5;
+            thrust += (target - thrust) * (1 - Math.exp(-dt * (target > thrust ? 14 : 4)));
+            ship.style.setProperty("--thrust", thrust.toFixed(3));
+
+            if (v < -40 && !back) { back = true; ship.classList.add("is-back"); }
+            else if (v > 40 && back) { back = false; ship.classList.remove("is-back"); }
+
+            const i = stopAt(y);
+            if (i !== active) setActive(i);
+        }
+
+        measure();
+        frame(0, 16);
+        gsap.ticker.add(frame);
+        ScrollTrigger.addEventListener("refresh", measure);
+        new ResizeObserver(measure).observe(document.body);   // page height changes
+        window.addEventListener("resize", measure);
+        // Labels change width once the mono font arrives.
+        if (document.fonts) document.fonts.ready.then(measure);
+
+        // Over the hero, the route hides if it would sit on the hero's
+        // bottom chrome (the swipe cue on phones). It shows once the
+        // hero scrolls away. While hidden it cannot be clicked.
+        const heroChrome = [...document.querySelectorAll("#hero .hud-footer, #hero .scroll-indicator")];
+        const clashes = () => {
+            const r = root.getBoundingClientRect();
+            return heroChrome.some((el) => {
+                const o = el.getBoundingClientRect();
+                return o.width > 0 && o.left < r.right && o.right > r.left && o.top < r.bottom && o.bottom > r.top;
+            });
+        };
+        const show = (on) => {
+            root.style.visibility = "";
+            gsap.to(root, {
+                opacity: on ? 1 : 0, duration: animate ? 0.8 : 0, overwrite: true,
+                onComplete: () => { if (!on) root.style.visibility = "hidden"; }
+            });
+        };
+        show(!clashes());
+        ScrollTrigger.create({
+            trigger: "#hero", start: "top top", end: "bottom 60%",
+            onLeave: () => show(true),
+            onEnterBack: () => show(!clashes())
+        });
+    }
+
     /* --- Always on (reduced motion too) ---------------------- */
 
     function buildChrome() {
-        // Orbit readout: which planet, and how far through the page.
-        const hud = document.querySelector(".orbit-hud");
-        if (hud) {
-            const cur = hud.querySelector(".oi-cur");
-            const name = hud.querySelector(".orbit-name");
-            const fill = hud.querySelector(".orbit-fill");
-            let active = 0;
-            const setOrbit = (i, section) => {
-                if (i === active) return;
-                active = i;
-                cur.textContent = String(i + 1).padStart(2, "0");
-                const label = ORBITS[section.dataset.planet] || "";
-                if (animate) {
-                    gsap.fromTo(cur, { yPercent: 100 }, { yPercent: 0, duration: 0.6, ease: "expo.out" });
-                    scramble(name, 0.6, label);
-                } else {
-                    name.textContent = label;
-                }
-            };
-            // Counted by planet, so a section that stays at the same
-            // planet (Capabilities, at Earth) keeps the same number.
-            const PLANETS = ["overview", "earth", "mars", "jupiter", "saturn"];
-            sections.forEach((s) => ScrollTrigger.create({
-                trigger: s, start: "top 55%", end: "bottom 55%",
-                onToggle: (self) => self.isActive && setOrbit(Math.max(0, PLANETS.indexOf(s.dataset.planet)), s)
-            }));
-            ScrollTrigger.create({
-                start: 0, end: "max",
-                onUpdate: (self) => gsap.set(fill, { scaleX: self.progress })
-            });
-            // On phones the readout would sit on the swipe cue, so it
-            // only appears once the hero has scrolled away.
-            const isPhone = () => window.innerWidth <= 768;
-            const showHud = (on) => gsap.to(hud, { opacity: on ? 1 : 0, duration: animate ? 0.8 : 0, overwrite: true });
-            showHud(!isPhone());
-            ScrollTrigger.create({
-                trigger: "#hero", start: "top top", end: "bottom 60%",
-                onLeave: () => showHud(true),
-                onEnterBack: () => showHud(!isPhone())
-            });
-        }
+        buildRoute();
 
         // The hero's bottom chrome fades as you leave the first screen.
         if (animate && !fallback) {
@@ -613,7 +867,346 @@ export function createMotion({ reducedMotion = false, quality = "high" } = {}) {
             if (fallback) buildFallbackScroll();
             buildChrome();
             buildSkills();
+            buildAbout(about, { lenis, dust });
             ScrollTrigger.refresh();
         }
     };
+}
+
+
+/* ============================================================
+   ABOUT — the biography, told in short scenes.
+   (Was about.js. Used only by createMotion above.)
+   ------------------------------------------------------------
+   Inspired by nesilnoble.com. The section is several screens
+   tall and its stage sticks to the viewport (position: sticky).
+   As you scroll, the scenes play one after another in the same
+   spot:
+
+   - Scene 1 ("Hi, I'm Ben.") rises letter by letter. Each letter
+     rests at its own small tilt, and a squiggle draws under
+     the name. Scrolling on, the greeting scales up toward you
+     and fades out.
+   - The other scenes: the headline sharpens in word by word out
+     of a blur, then the short text below it follows.
+   - Each scene blurs away upward before the next one arrives.
+   - Last scene: "Someone must take the first step." scales up and
+     fades the same way, while everything else on the stage (the
+     lines around it, the CV button, the label and counter) breaks
+     into stardust and drifts up (stardust.js createBurst).
+
+   The stage opts out of the screen-edge stardust (data-dust="off"),
+   so these animations are the section's own entrance and exit.
+
+   Sound: the scene changes, zooms and the burst are announced as
+   "bl:sound" events on window; audio.js plays them when sound is on.
+
+   Without motion (prefers-reduced-motion) nothing here runs and
+   the scenes stay as a plain, readable list (see the ABOUT part of app.css).
+
+   Content is in index.html: every element with data-reveal is
+   split ("chars", "words" or "rise"); any other child of a
+   scene simply fades up after it. Add, remove or reorder scenes
+   freely; the section height and the counter follow.
+   ============================================================ */
+
+// Resting tilt (deg) and lift (% of height) per letter of the big
+// greeting, so the line sits a little uneven, like hand-set type.
+const TILT = [-4, 3, -2, 4, -3, 5, -4, 2, -5, 3, -2, 4];
+const LIFT = [3, -4, 2, -3, 4, -2, 3, -4, 2, -3, 4, -2];
+
+// Timeline units (the scroll distance is shared out by these).
+const HOLD = 0.9;     // a scene sits fully formed
+const OUT = 0.5;      // a scene blurs away
+const SCENE_GAP = 0.12;    // empty stage between two scenes
+const ZOOM = 3.6;     // how far the big lines scale up as they leave
+const ZOOM_DUR = 1.1; // ...and how long that takes
+const BURST_DUR = 1.2;
+
+const emit = (type, detail = {}) =>
+    window.dispatchEvent(new CustomEvent("bl:sound", { detail: { type, ...detail } }));
+
+// A big line scales up toward the viewer and fades. Scrubbed, so it
+// runs backward when you scroll back up.
+function zoomOut(tl, el, at) {
+    const p = { v: 0 };
+    tl.to(el, { scale: ZOOM, duration: ZOOM_DUR, ease: "power2.in" }, at)
+      .to(el, { opacity: 0, duration: ZOOM_DUR, ease: "power3.in" }, at)
+      .to(p, { v: 1, duration: ZOOM_DUR, ease: "none", onUpdate: () => emit("zoom", { p: p.v }) }, at);
+}
+
+/* ------------------------------------------------------------
+   Splitting
+   ------------------------------------------------------------ */
+
+// Wrap each word (or letter) in a span, in place, so inline
+// elements such as <em class="accent"> keep their styling.
+// SVG (the squiggle) is left alone.
+function splitInPlace(el, mode) {
+    const units = [];
+    const walk = (node) => {
+        [...node.childNodes].forEach((n) => {
+            if (n.nodeType === Node.TEXT_NODE) {
+                const frag = document.createDocumentFragment();
+                n.textContent.split(/(\s+)/).forEach((part) => {
+                    if (!part) return;
+                    if (/^\s+$/.test(part)) { frag.appendChild(document.createTextNode(" ")); return; }
+                    const word = document.createElement("span");
+                    word.className = "aw";
+                    if (mode === "chars") {
+                        word.setAttribute("aria-hidden", "true");
+                        for (const ch of part) {
+                            const c = document.createElement("span");
+                            c.className = "ac";
+                            c.textContent = ch;
+                            word.appendChild(c);
+                            units.push(c);
+                        }
+                    } else {
+                        word.textContent = part;
+                        units.push(word);
+                    }
+                    frag.appendChild(word);
+                });
+                n.replaceWith(frag);
+            } else if (n.nodeType === Node.ELEMENT_NODE && !(n instanceof SVGElement)) {
+                walk(n);
+            }
+        });
+    };
+    walk(el);
+    return units;
+}
+
+/* ------------------------------------------------------------
+   Scene timelines
+   ------------------------------------------------------------ */
+
+// Hidden starting states, set once and explicitly. (Not left to
+// fromTo: ScrollTrigger.refresh() reverts what fromTo renders up
+// front, which would leave every scene showing at once.)
+const FROM = {
+    chars: { yPercent: 120, rotate: (i) => TILT[i % TILT.length] * 4, opacity: 0 },
+    words: { opacity: 0, y: "0.3em", filter: "blur(10px)" },
+    rise: { opacity: 0, yPercent: 70, rotate: 8 },
+    fade: { opacity: 0, y: 24, filter: "blur(6px)" }
+};
+
+function hideScene(scene) {
+    [...scene.children].forEach((el) => {
+        const mode = el._units ? el.dataset.reveal : "fade";
+        gsap.set(el._units || el, FROM[mode] || FROM.words);
+    });
+    const squiggle = scene.querySelector(".about-squiggle path");
+    if (squiggle) gsap.set(squiggle, { strokeDashoffset: 1 });
+}
+
+// Everything in a scene arrives in reading order.
+function sceneIn(scene) {
+    const tl = gsap.timeline();
+    let t = 0;
+    [...scene.children].forEach((el) => {
+        const units = el._units;
+        const mode = units ? el.dataset.reveal : "fade";
+        if (mode === "chars") {
+            tl.to(units, {
+                yPercent: (i) => LIFT[i % LIFT.length], rotate: (i) => TILT[i % TILT.length], opacity: 1,
+                duration: 0.7, ease: "expo.out", stagger: { amount: 0.5 }
+            }, t);
+            t += 0.6;
+        } else if (mode === "rise") {
+            tl.to(units, { opacity: 1, yPercent: 0, rotate: 0, duration: 0.6, ease: "expo.out", stagger: { amount: 0.4 } }, t);
+            t += 0.55;
+        } else if (units) {
+            tl.to(units, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.45, ease: "power2.out", stagger: { amount: 0.6 } }, t);
+            t += 0.65;
+        } else {
+            tl.to(el, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.45, ease: "power2.out" }, t);
+            t += 0.18;
+        }
+    });
+    const squiggle = scene.querySelector(".about-squiggle path");
+    if (squiggle) tl.to(squiggle, { strokeDashoffset: 0, duration: 0.5, ease: "power2.inOut" }, Math.max(0, t - 0.5));
+    return tl;
+}
+
+// The greeting zooms out; the small lines around it fade first.
+function helloOut(scene) {
+    const tl = gsap.timeline();
+    const title = scene.querySelector(".about-hello");
+    const rest = [...scene.children].filter((c) => c !== title);
+    tl.to(rest, { opacity: 0, y: -20, filter: "blur(6px)", duration: OUT * 0.7, ease: "power1.in" }, 0);
+    if (title) {
+        // The letters drift apart a little as they grow.
+        const chars = title.querySelectorAll(".ac");
+        const mid = (chars.length - 1) / 2;
+        tl.to(chars, { x: (i) => (i - mid) * Math.min(window.innerWidth * 0.006, 9), duration: ZOOM_DUR, ease: "power1.in" }, 0);
+        zoomOut(tl, title, 0);
+    }
+    return tl;
+}
+
+// The finale: the big line zooms out while the rest turns to dust.
+// Without WebGL (no dust) the rest simply fades.
+function finaleOut(scene, head, dust) {
+    const tl = gsap.timeline();
+    const big = scene.querySelector(".about-big");
+    const rest = [...scene.children].filter((c) => c !== big);
+    const leaving = head ? [head, ...rest] : rest;
+    // The big line waits until the lines below it are turning to dust,
+    // so its growing letters never sit on top of solid text.
+    if (big) zoomOut(tl, big, BURST_DUR * 0.5);
+
+    const burst = dust && dust.createBurst
+        ? dust.createBurst({ elements: leaving, anchor: scene.closest(".about-stage") })
+        : null;
+    const p = { v: 0 };
+    tl.to(p, {
+        v: 1, duration: BURST_DUR, ease: "none",
+        onUpdate: () => {
+            if (burst) burst.setProgress(p.v);
+            else gsap.set(leaving, { opacity: 1 - p.v });
+            emit("burst", { p: p.v });
+        }
+    }, 0);
+    return tl;
+}
+
+function sceneOut(scene) {
+    return gsap.to(scene, { opacity: 0, y: -40, filter: "blur(8px)", duration: OUT, ease: "power1.in" });
+}
+
+/* ------------------------------------------------------------
+   Public
+   ------------------------------------------------------------ */
+
+// Runs under the preloader, before the stardust is sampled, so
+// the taller section is already in the layout it measures.
+function prepareAbout({ animate = true } = {}) {
+    const section = document.getElementById("about");
+    if (!section || !animate || !gsap || !ScrollTrigger) return null;
+    const scenes = [...section.querySelectorAll(".about-scene")];
+    if (!scenes.length) return null;
+
+    section.classList.add("about-pinned");
+    section.style.setProperty("--scenes", scenes.length);
+    const total = section.querySelector(".about-count-total");
+    if (total) total.textContent = String(scenes.length).padStart(2, "0");
+
+    section.querySelectorAll("[data-reveal]").forEach((el) => {
+        const mode = el.dataset.reveal;
+        // Letters split into spans read badly in screen readers.
+        if (mode === "chars" && !el.getAttribute("aria-label")) {
+            el.setAttribute("aria-label", el.textContent.replace(/\s+/g, " ").trim());
+        }
+        el._units = splitInPlace(el, mode === "chars" ? "chars" : "words");
+    });
+
+    scenes[0].classList.add("is-current");
+    return { section, scenes };
+}
+
+// Runs once the intro is over and scrolling is unlocked.
+function buildAbout(state, { lenis = null, dust = null } = {}) {
+    if (!state) return null;
+    const { section, scenes } = state;
+    const track = section.querySelector(".content-block");
+    const head = section.querySelector(".about-head");
+    const cur = section.querySelector(".about-count-cur");
+    const fill = section.querySelector(".about-count-fill");
+
+    scenes.forEach(hideScene);
+    if (head) gsap.set(head, { opacity: 0, y: 16 });
+
+    // One timeline owns every animation in this section, so tweens on
+    // the same element can never run out of order, even when the page
+    // jumps (scrollbar drag, End key).
+
+    // 1. The first scene forms while the stage rises into view.
+    const entrance = gsap.timeline();
+    if (head) entrance.to(head, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out" }, 0);
+    entrance.add(sceneIn(scenes[0]), 0.1);
+
+    // 2. While the stage is stuck, the scenes take turns.
+    const starts = [0];   // when each scene starts arriving
+    const rests = [0];    // when each scene is fully formed
+    const body = gsap.timeline();
+    let t = HOLD * 0.6;
+    scenes.forEach((scene, i) => {
+        if (i > 0) {
+            starts[i] = t;
+            const tl = sceneIn(scene);
+            body.add(tl, t);
+            t += tl.duration();
+            rests[i] = t;
+            t += HOLD;
+        }
+        if (i === 0 && scenes.length > 1) {
+            body.add(helloOut(scene), t);
+            t += ZOOM_DUR * 0.8;          // the next scene starts as the zoom fades
+        } else if (i < scenes.length - 1) {
+            body.add(sceneOut(scene), t);
+            t += OUT + SCENE_GAP;
+        } else {
+            const tl = finaleOut(scene, head, dust);
+            body.add(tl, t);
+            t += tl.duration();
+        }
+    });
+    body.set({}, {}, t + HOLD * 0.3);   // a moment of empty stage before it lets go
+
+    // The entrance plays over the approach (stage top from 55% of the
+    // screen to the top), the rest while pinned. Shares of the timeline
+    // are set to match those scroll distances.
+    const approach = window.innerHeight * 0.55;
+    const pinned = Math.max(1, track.offsetHeight - window.innerHeight);
+    const E = body.duration() * approach / pinned;
+    entrance.timeScale(entrance.duration() / E);
+    const master = gsap.timeline();
+    master.add(entrance, 0).add(body, E);
+    for (let i = 0; i < starts.length; i++) { starts[i] += E; rests[i] += E; }
+    starts[0] = 0;
+
+    let active = 0;
+    const setActive = (i) => {
+        if (i === active) return;
+        scenes[active].classList.remove("is-current");
+        scenes[i].classList.add("is-current");
+        active = i;
+        emit("scene", { index: i });
+        if (cur) {
+            cur.textContent = String(i + 1).padStart(2, "0");
+            gsap.fromTo(cur, { yPercent: 100 }, { yPercent: 0, duration: 0.5, ease: "expo.out", overwrite: true });
+        }
+    };
+
+    const st = ScrollTrigger.create({
+        trigger: track,
+        start: "top 55%",
+        end: "bottom bottom",
+        scrub: 0.6,
+        animation: master,
+        invalidateOnRefresh: true
+    });
+    master.eventCallback("onUpdate", () => {
+        const time = master.time();
+        let i = 0;
+        while (i + 1 < starts.length && time >= starts[i + 1]) i++;
+        setActive(i);
+        if (fill) gsap.set(fill, { scaleX: master.progress() });
+    });
+
+    // Keyboard: tabbing into a scene (the CV link) scrolls to where
+    // that scene is fully formed, so focus never lands on hidden text.
+    scenes.forEach((scene, i) => {
+        scene.addEventListener("focusin", () => {
+            if (!st) return;
+            const y = st.start + (rests[i] / master.duration()) * (st.end - st.start);
+            if (lenis) lenis.scrollTo(y, { immediate: true });
+            else window.scrollTo(0, y);
+        });
+    });
+
+    ScrollTrigger.refresh();
+    return { master };
 }

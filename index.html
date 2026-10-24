@@ -63,12 +63,11 @@
         </div>
     </nav>
 
-    <!-- Orbit readout: current planet + page progress (driven by motion.js) -->
-    <div class="orbit-hud" aria-hidden="true">
-        <span class="orbit-index"><span class="oi-mask"><span class="oi-cur">01</span></span> / 05</span>
-        <span class="orbit-track"><span class="orbit-fill"></span></span>
-        <span class="orbit-name">SOL // SYSTEM VIEW</span>
-    </div>
+    <!-- Flight route: a small ship flies along the bottom as you scroll.
+         Click a label or the track to travel there; drag to scrub.
+         Built from the sections below by motion.js (buildRoute).
+         A section can set data-route="Name" to change its label. -->
+    <div class="route" role="navigation" aria-label="Page sections" data-lenis-prevent></div>
 
     <div class="mobile-menu" id="mobile-menu">
         <a href="#hero" class="mobile-link">Home</a>
@@ -126,20 +125,61 @@
             </div>
         </section>
 
-        <!-- SECTION 2: ABOUT (Earth) -->
+        <!-- SECTION 2: ABOUT (Earth)
+             Told in short scenes that play one at a time while the
+             stage is pinned (ABOUT code in static/motion.js). Without motion they
+             stack as a plain list. Edit or reorder scenes freely. -->
         <section id="about" class="align-right" data-planet="earth">
-            <div class="content-block" style="max-width: 600px;">
-                <div class="section-label">
-                    <div class="section-line"></div>
-                    <span class="section-text">BIOGRAPHY</span>
+            <div class="content-block">
+                <div class="about-stage" data-dust="off">
+                    <div class="about-frame">
+                        <div class="about-head">
+                            <div class="section-label">
+                                <div class="section-line"></div>
+                                <span class="section-text">BIOGRAPHY</span>
+                            </div>
+                            <div class="about-count" aria-hidden="true">
+                                <span><span class="about-count-mask"><span class="about-count-cur">01</span></span> / <span class="about-count-total">06</span></span>
+                                <span class="about-count-track"><span class="about-count-fill"></span></span>
+                            </div>
+                        </div>
+
+                        <div class="about-scenes">
+                            <div class="about-scene about-scene--hello">
+                                <p class="about-kicker">Nice to meet you</p>
+                                <h2 class="about-hello" data-reveal="chars">Hi, I'm <em class="accent about-name">Ben.<svg class="about-squiggle" viewBox="0 0 104 14" aria-hidden="true" focusable="false"><path pathLength="1" d="M2 8 Q 12 1 22 8 T 42 8 T 62 8 T 82 8 T 102 8"/></svg></em></h2>
+                                <p class="about-body">Benedict, if we're being formal. I'm a Master's student in Computer Science at Ontario Tech University.</p>
+                            </div>
+
+                            <div class="about-scene">
+                                <h3 class="about-title" data-reveal="words">I design interactions for the <em class="accent">pen</em>, the <em class="accent">eye</em>, and the <em class="accent">mind</em>.</h3>
+                                <p class="about-body">My research is in human–computer interaction. I focus on novel ways to interact with hardware like pen-based devices, eye trackers, and brain–computer interfaces.</p>
+                            </div>
+
+                            <div class="about-scene">
+                                <h3 class="about-title" data-reveal="words">Lately, I design how people work <em class="accent">with AI</em>.</h3>
+                                <p class="about-body">My recent research creates new interactions with large language models, from AI that annotates documents alongside your pen to questions generated from where you look.</p>
+                            </div>
+
+                            <div class="about-scene">
+                                <h3 class="about-title" data-reveal="words">In third grade, I wanted to be an <em class="accent">inventor</em>.</h3>
+                                <p class="about-body">I wanted to create something never made before, and use it to help people who couldn't do a specific task.</p>
+                            </div>
+
+                            <div class="about-scene">
+                                <h3 class="about-title" data-reveal="words">Then I discovered <em class="accent">programming</em>.</h3>
+                                <p class="about-body">I was fascinated that you can put your heart and soul into a program and have it do exactly what you envisioned. Your legacy can live on in your programs for generations.</p>
+                            </div>
+
+                            <div class="about-scene about-scene--finale">
+                                <p class="about-lead" data-reveal="words">I want my legacy to reach people worldwide, like aiding the blind or advancing neural interfaces.</p>
+                                <p class="about-big" data-reveal="rise">Someone must take the <em class="accent">first step.</em></p>
+                                <p class="about-body">These dreams may seem distant. I'll take that step, even if no one else is willing.</p>
+                                <div class="about-cta"><a href="static/pdf/Resume.pdf" target="_blank" class="btn-primary">View CV</a></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <h2>About <em class="accent">Me</em></h2>
-                <br>
-                <p class="scrub-text">
-                    Hi! My name is Benedict, but you can call me Ben for short. I am a Master computer science student at Ontario Tech University. My research area is human-computer interaction, focusing on novel interactions with hardware like pen-based devices, eye-tracking, and brain computer interfaces. Recently, my research has been creating interactions with Large Language Models.<br><br>
-    When I was young, around third grade, I was passionate about being an inventor, in the sense that I wanted to create something never made before and use it to help people who couldn't do a specific task. But that morphed when I was introduced to computer programming. I was amused by how you can put your "heart and soul" into a program and do exactly what you envisioned, meaning your legacy can be imprinted into your programs for generations. My desired legacy is to give to people worldwide, like aiding the blind or advancing neural interfaces. These "dreams" may seem distant, but someone must take the first step, even if no one is willing.
-                </p>
-                <a href="static/pdf/Resume.pdf" target="_blank" class="btn-primary">View CV</a>
             </div>
         </section>
 

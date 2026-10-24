@@ -156,15 +156,21 @@ export function createStardust({ roots, quality = "high" } = {}) {
     // Content in a pinned (sticky) container follows that container:
     // its offset is where the container was when sampled, minus where
     // it is now on screen.
+    // A layer can also bring its own zone lines (userData.lines), as
+    // a burst does; all others use the screen-edge zones.
+    const globalLines = new THREE.Vector4();
     const makeLayer = (anchor = null) => {
         const layer = new THREE.Points(new THREE.BufferGeometry(), mat);
         layer.frustumCulled = false;
         if (anchor) {
-            const sampledTop = anchor.getBoundingClientRect().top + window.scrollY;
+            let sampledTop = 0;
+            layer.userData.rebase = () => { sampledTop = anchor.getBoundingClientRect().top + window.scrollY; };
+            layer.userData.rebase();
             layer.userData.scroll = () => sampledTop - anchor.getBoundingClientRect().top;
         }
         layer.onBeforeRender = () => {
             uniforms.uScroll.value = layer.userData.scroll ? layer.userData.scroll() : window.scrollY;
+            uniforms.uLines.value.copy(layer.userData.lines ? layer.userData.lines() : globalLines);
             mat.uniformsNeedUpdate = true;
         };
         scene.add(layer);
@@ -198,9 +204,123 @@ export function createStardust({ roots, quality = "high" } = {}) {
     }
 
     // Content can opt out with data-dust="off" (it keeps its own effect).
-    const isVisible = (el) =>
-        !el.closest('[data-dust="off"]') &&
+    const isVisible = (el, honourOff = true) =>
+        !(honourOff && el.closest('[data-dust="off"]')) &&
         el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden";
+
+    const range = document.createRange();
+    const newOut = () => ({ x: [], y: [], c: [], s: [] });
+
+    // Every visible word and border/hairline under root becomes points.
+    // pushFor(el) returns the push(x, y, r, g, b, a, size) to use for
+    // that element, in screen coordinates.
+    function sampleTree(root, pushFor, honourOff = true) {
+        const opacityCache = new Map();
+        const opacityOf = (el) => {
+            if (opacityCache.has(el)) return opacityCache.get(el);
+            let o = 1;
+            for (let n = el; n && n !== root.parentElement; n = n.parentElement) o *= parseFloat(getComputedStyle(n).opacity);
+            opacityCache.set(el, o);
+            return o;
+        };
+
+        const starlight = cssVar("--starlight", "#EDEDF3");
+        const gold = cssVar("--horizon-gold", "#FFD28E");
+        const red = cssVar("--horizon-red", "#D66D50");
+
+        /* Words: re-drawn on the scratch canvas, then read back. */
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            const el = node.parentElement;
+            if (!el || !node.textContent.trim() || !isVisible(el, honourOff)) continue;
+            const push = pushFor(el);
+            const cs = getComputedStyle(el);
+            const fs = parseFloat(cs.fontSize);
+            const hl = el.closest(".highlight");
+            const col = parseColor(cs.color);
+            if (!hl && (!col || col[3] < 0.05)) continue;
+            const alpha = (col ? col[3] : 1) * opacityOf(el);
+            const upper = cs.textTransform === "uppercase";
+            const stride = Math.min(2.6, Math.max(1, fs / 22));
+            const size = Math.min(3.2, Math.max(1.15, stride * 1.3));
+            const pad = Math.ceil(fs * 0.35);
+
+            sctx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+            if ("letterSpacing" in sctx) sctx.letterSpacing = cs.letterSpacing === "normal" ? "0px" : cs.letterSpacing;
+
+            const text = node.textContent;
+            const re = /\S+/g;
+            let m;
+            while ((m = re.exec(text))) {
+                range.setStart(node, m.index);
+                range.setEnd(node, m.index + m[0].length);
+                const r = range.getBoundingClientRect();
+                if (r.width === 0 || r.height === 0) continue;
+                const word = upper ? m[0].toUpperCase() : m[0];
+                const W = Math.min(scratch.width, Math.ceil(r.width + pad * 2));
+                const H = Math.min(scratch.height, Math.ceil(r.height + pad * 2));
+                const metrics = sctx.measureText(word);
+                const A = metrics.fontBoundingBoxAscent ?? fs * 0.8;
+
+                sctx.clearRect(0, 0, W, H);
+                if (hl) {
+                    const hr = hl.getBoundingClientRect();
+                    const g = sctx.createLinearGradient(hr.left - r.left + pad, 0, hr.right - r.left + pad, 0);
+                    g.addColorStop(0, starlight); g.addColorStop(0.45, gold); g.addColorStop(1, red);
+                    sctx.fillStyle = g;
+                } else {
+                    sctx.fillStyle = cs.color;
+                }
+                sctx.fillText(word, pad, pad + A);
+
+                const data = sctx.getImageData(0, 0, W, H).data;
+                for (let y = 0; y < H; y += stride) {
+                    for (let x = 0; x < W; x += stride) {
+                        const px = Math.min(W - 1, (x + Math.random() * stride) | 0);
+                        const py = Math.min(H - 1, (y + Math.random() * stride) | 0);
+                        const i = (py * W + px) * 4;
+                        if (data[i + 3] < 110) continue;
+                        push(r.left - pad + px, r.top - pad + py,
+                            data[i] / 255, data[i + 1] / 255, data[i + 2] / 255, alpha, size);
+                    }
+                }
+            }
+        }
+
+        /* Borders and hairlines become dotted lines of dust. */
+        root.querySelectorAll("*").forEach((el) => {
+            if (!isVisible(el, honourOff)) return;
+            const push = pushFor(el);
+            const cs = getComputedStyle(el);
+            const r = el.getBoundingClientRect();
+            if (r.width === 0 && r.height === 0) return;
+            const op = opacityOf(el);
+            const line = (x0, y0, x1, y1, w, c) => {
+                const len = Math.hypot(x1 - x0, y1 - y0);
+                const n = Math.max(2, Math.round(len / 1.7));
+                for (let k = 0; k < n; k++) {
+                    const t = k / (n - 1);
+                    push(x0 + (x1 - x0) * t + (Math.random() - 0.5),
+                        y0 + (y1 - y0) * t + Math.random() * w,
+                        c[0], c[1], c[2], Math.min(1, c[3] * 1.6) * op, 1.4);
+                }
+            };
+            [["Top", r.left, r.top, r.right, r.top],
+             ["Bottom", r.left, r.bottom - 1, r.right, r.bottom - 1],
+             ["Left", r.left, r.top, r.left, r.bottom],
+             ["Right", r.right - 1, r.top, r.right - 1, r.bottom]].forEach(([side, x0, y0, x1, y1]) => {
+                const w = parseFloat(cs[`border${side}Width`]);
+                if (!w || cs[`border${side}Style`] === "none") return;
+                const c = parseColor(cs[`border${side}Color`]);
+                if (c && c[3] >= 0.05) line(x0, y0, x1, y1, w, c);
+            });
+            // Thin decorative rules drawn with a background (e.g. .section-line).
+            if (r.height <= 3 && r.width > 8 && cs.backgroundImage !== "none") {
+                line(r.left, r.top, r.right, r.top, r.height,
+                    gold.startsWith("#") ? hexToRgba(gold) : (parseColor(gold) || [1, 0.82, 0.56, 1]));
+            }
+        });
+    }
 
     function sampleAll() {
         // Start clean: images hidden by a new layout must not leave dust.
@@ -212,123 +332,18 @@ export function createStardust({ roots, quality = "high" } = {}) {
         const sy = window.scrollY;
         // Points are grouped by the sticky container they sit in (null = none).
         const outs = new Map();
-        let out = null;
-        const useGroup = (el) => {
+        const pushFor = (el) => {
             const anchor = el.closest("[data-dust-sticky]");
-            out = outs.get(anchor);
-            if (!out) { out = { x: [], y: [], c: [], s: [] }; outs.set(anchor, out); }
+            let out = outs.get(anchor);
+            if (!out) { out = newOut(); outs.set(anchor, out); }
+            return (x, y, r, g, b, a, size) => {
+                out.x.push(x + sx); out.y.push(y + sy);
+                out.c.push(r, g, b, a); out.s.push(size);
+            };
         };
-        const push = (x, y, r, g, b, a, size) => {
-            out.x.push(x + sx); out.y.push(y + sy);
-            out.c.push(r, g, b, a); out.s.push(size);
-        };
-        const opacityCache = new Map();
-        const opacityOf = (el, root) => {
-            if (opacityCache.has(el)) return opacityCache.get(el);
-            let o = 1;
-            for (let n = el; n && n !== root.parentElement; n = n.parentElement) o *= parseFloat(getComputedStyle(n).opacity);
-            opacityCache.set(el, o);
-            return o;
-        };
-
-        const starlight = cssVar("--starlight", "#EDEDF3");
-        const gold = cssVar("--horizon-gold", "#FFD28E");
-        const red = cssVar("--horizon-red", "#D66D50");
-        const range = document.createRange();
 
         roots.forEach((root) => {
-            /* Words: re-drawn on the scratch canvas, then read back. */
-            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-            for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-                const el = node.parentElement;
-                if (!el || !node.textContent.trim() || !isVisible(el)) continue;
-                useGroup(el);
-                const cs = getComputedStyle(el);
-                const fs = parseFloat(cs.fontSize);
-                const hl = el.closest(".highlight");
-                const col = parseColor(cs.color);
-                if (!hl && (!col || col[3] < 0.05)) continue;
-                const alpha = (col ? col[3] : 1) * opacityOf(el, root);
-                const upper = cs.textTransform === "uppercase";
-                const stride = Math.min(2.6, Math.max(1, fs / 22));
-                const size = Math.min(3.2, Math.max(1.15, stride * 1.3));
-                const pad = Math.ceil(fs * 0.35);
-
-                sctx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
-                if ("letterSpacing" in sctx) sctx.letterSpacing = cs.letterSpacing === "normal" ? "0px" : cs.letterSpacing;
-
-                const text = node.textContent;
-                const re = /\S+/g;
-                let m;
-                while ((m = re.exec(text))) {
-                    range.setStart(node, m.index);
-                    range.setEnd(node, m.index + m[0].length);
-                    const r = range.getBoundingClientRect();
-                    if (r.width === 0 || r.height === 0) continue;
-                    const word = upper ? m[0].toUpperCase() : m[0];
-                    const W = Math.min(scratch.width, Math.ceil(r.width + pad * 2));
-                    const H = Math.min(scratch.height, Math.ceil(r.height + pad * 2));
-                    const metrics = sctx.measureText(word);
-                    const A = metrics.fontBoundingBoxAscent ?? fs * 0.8;
-
-                    sctx.clearRect(0, 0, W, H);
-                    if (hl) {
-                        const hr = hl.getBoundingClientRect();
-                        const g = sctx.createLinearGradient(hr.left - r.left + pad, 0, hr.right - r.left + pad, 0);
-                        g.addColorStop(0, starlight); g.addColorStop(0.45, gold); g.addColorStop(1, red);
-                        sctx.fillStyle = g;
-                    } else {
-                        sctx.fillStyle = cs.color;
-                    }
-                    sctx.fillText(word, pad, pad + A);
-
-                    const data = sctx.getImageData(0, 0, W, H).data;
-                    for (let y = 0; y < H; y += stride) {
-                        for (let x = 0; x < W; x += stride) {
-                            const px = Math.min(W - 1, (x + Math.random() * stride) | 0);
-                            const py = Math.min(H - 1, (y + Math.random() * stride) | 0);
-                            const i = (py * W + px) * 4;
-                            if (data[i + 3] < 110) continue;
-                            push(r.left - pad + px, r.top - pad + py,
-                                data[i] / 255, data[i + 1] / 255, data[i + 2] / 255, alpha, size);
-                        }
-                    }
-                }
-            }
-
-            /* Borders and hairlines become dotted lines of dust. */
-            root.querySelectorAll("*").forEach((el) => {
-                if (!isVisible(el)) return;
-                useGroup(el);
-                const cs = getComputedStyle(el);
-                const r = el.getBoundingClientRect();
-                if (r.width === 0 && r.height === 0) return;
-                const op = opacityOf(el, root);
-                const line = (x0, y0, x1, y1, w, c) => {
-                    const len = Math.hypot(x1 - x0, y1 - y0);
-                    const n = Math.max(2, Math.round(len / 1.7));
-                    for (let k = 0; k < n; k++) {
-                        const t = k / (n - 1);
-                        push(x0 + (x1 - x0) * t + (Math.random() - 0.5),
-                            y0 + (y1 - y0) * t + Math.random() * w,
-                            c[0], c[1], c[2], Math.min(1, c[3] * 1.6) * op, 1.4);
-                    }
-                };
-                [["Top", r.left, r.top, r.right, r.top],
-                 ["Bottom", r.left, r.bottom - 1, r.right, r.bottom - 1],
-                 ["Left", r.left, r.top, r.left, r.bottom],
-                 ["Right", r.right - 1, r.top, r.right - 1, r.bottom]].forEach(([side, x0, y0, x1, y1]) => {
-                    const w = parseFloat(cs[`border${side}Width`]);
-                    if (!w || cs[`border${side}Style`] === "none") return;
-                    const c = parseColor(cs[`border${side}Color`]);
-                    if (c && c[3] >= 0.05) line(x0, y0, x1, y1, w, c);
-                });
-                // Thin decorative rules drawn with a background (e.g. .section-line).
-                if (r.height <= 3 && r.width > 8 && cs.backgroundImage !== "none") {
-                    line(r.left, r.top, r.right, r.top, r.height,
-                        gold.startsWith("#") ? hexToRgba(gold) : (parseColor(gold) || [1, 0.82, 0.56, 1]));
-                }
-            });
+            sampleTree(root, pushFor);
 
             /* Images get their own layers, so a late (lazy) load only
                samples that one image. */
@@ -339,7 +354,7 @@ export function createStardust({ roots, quality = "high" } = {}) {
             });
         });
 
-        upload(textLayer, outs.get(null) || { x: [], y: [], c: [], s: [] }, BUDGET);
+        upload(textLayer, outs.get(null) || newOut(), BUDGET);
         outs.forEach((group, anchor) => {
             if (!anchor) return;
             const layer = makeLayer(anchor);
@@ -501,7 +516,8 @@ export function createStardust({ roots, quality = "high" } = {}) {
         uniforms.uTime.value = time;
         uniforms.uScroll.value = window.scrollY;
         const lines = zoneLines();
-        uniforms.uLines.value.set(lines[0], lines[1], lines[2], lines[3]);
+        globalLines.set(lines[0], lines[1], lines[2], lines[3]);
+        uniforms.uLines.value.copy(globalLines);
         applyMasks(lines);
         if (started || intro > 0) renderer.render(scene, cam);
     }
@@ -538,9 +554,92 @@ export function createStardust({ roots, quality = "high" } = {}) {
     roots.forEach((r) => ro.observe(r));
     if (document.fonts) document.fonts.addEventListener("loadingdone", scheduleSample);
 
+    /* --- Bursts ---------------------------------------------- */
+
+    // Turn chosen elements to dust on demand, driven by a progress
+    // value (0 = solid, 1 = gone) instead of by the screen edges. The
+    // dust breaks away top to bottom and drifts up, the same look as
+    // the top edge, and the real elements are masked away in step.
+    // Used where content opts out of the normal dust (data-dust="off")
+    // but should still leave as dust, e.g. the end of About.
+    // anchor: the sticky container the elements sit in (or null).
+    function createBurst({ elements, anchor = null }) {
+        const layer = makeLayer(anchor);
+        const lines = new THREE.Vector4();
+        let rel = null;          // bounds relative to the anchor
+        let stale = true;
+        let progress = 0;
+
+        const anchorTop = () => (anchor ? anchor.getBoundingClientRect().top : -window.scrollY);
+        const zRel = () => rel.top - 2 + progress * (rel.h + rel.range + 4);
+
+        // Formed dust is invisible (the real elements show); only the
+        // exit pair of lines moves.
+        layer.userData.lines = () => {
+            if (!rel) return lines.set(1e6, 1e6 - 1, -1e6, -1e6 - 1);
+            const z = anchorTop() + zRel();
+            return lines.set(1e6, 1e6 - 1, z, z - rel.range);
+        };
+
+        function sample() {
+            stale = false;
+            if (layer.userData.rebase) layer.userData.rebase();
+            const sx = window.scrollX;
+            const sy = window.scrollY;
+            const out = newOut();
+            const push = (x, y, r, g, b, a, size) => {
+                out.x.push(x + sx); out.y.push(y + sy);
+                out.c.push(r, g, b, a); out.s.push(size);
+            };
+            elements.forEach((el) => sampleTree(el, () => push, false));
+            upload(layer, out, BUDGET * 0.25);
+
+            const at = anchorTop();
+            let top = Infinity, bottom = -Infinity;
+            elements.forEach((el) => {
+                const r = el.getBoundingClientRect();
+                el._dustTop = r.top - at;
+                top = Math.min(top, r.top - at);
+                bottom = Math.max(bottom, r.bottom - at);
+            });
+            const h = Math.max(1, bottom - top);
+            rel = { top, h, range: Math.max(160, h * 0.4) };
+            api.count = [...scene.children].reduce((n, l) => n + l.geometry.drawRange.count, 0);
+        }
+
+        function maskElements() {
+            elements.forEach((el) => {
+                let img = "";
+                if (progress >= 1) img = "linear-gradient(transparent, transparent)";
+                else if (progress > 0 && rel) {
+                    const z = zRel() - el._dustTop;
+                    img = `linear-gradient(to bottom, transparent ${(z - 0.15 * rel.range).toFixed(1)}px, #000 ${z.toFixed(1)}px)`;
+                }
+                el.style.maskImage = el.style.webkitMaskImage = img;
+            });
+        }
+
+        let resizeTimer = 0;
+        window.addEventListener("resize", () => {
+            stale = true;
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => { if (progress > 0) { sample(); maskElements(); } }, 300);
+        });
+
+        return {
+            sample,
+            setProgress(p) {
+                progress = Math.min(1, Math.max(0, p));
+                if (progress > 0 && stale) sample();
+                maskElements();
+            }
+        };
+    }
+
     const api = {
         canvas,
         count: 0,
+        createBurst,
         sample: sampleAll,
         tick,
         // Intro: the first screen gathers out of dust, top to bottom.
