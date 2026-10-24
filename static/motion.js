@@ -178,6 +178,75 @@ function addTextRoll(el) {
     el.appendChild(roll);
 }
 
+// A scrollbar drawn by the page. Dragging it scrolls through Lenis, so the
+// scroll happens on the main thread in the same frame as the dust and masks.
+// The native scrollbar scrolls on the compositor thread, which the dust
+// can't follow without lagging.
+function createScrollbar(lenis) {
+    const root = document.documentElement;
+    root.classList.add("custom-scrollbar");
+
+    const bar = document.createElement("div");
+    bar.className = "scrollbar";
+    bar.setAttribute("aria-hidden", "true");
+    const thumb = document.createElement("div");
+    thumb.className = "scrollbar-thumb";
+    bar.appendChild(thumb);
+    document.body.appendChild(bar);
+
+    let thumbH = 0, travel = 1, drag = null;
+    const limit = () => Math.max(1, root.scrollHeight - window.innerHeight);
+    const clamp = (v) => Math.min(limit(), Math.max(0, v));
+
+    function place() {
+        // While dragging, follow the target so the thumb stays under the cursor.
+        const y = drag ? lenis.targetScroll : lenis.scroll;
+        thumb.style.transform = `translateY(${(clamp(y) / limit()) * travel}px)`;
+    }
+
+    function measure() {
+        const h = window.innerHeight;
+        thumbH = Math.max(40, (h * h) / (h + limit()));
+        travel = Math.max(1, h - thumbH);
+        thumb.style.height = `${thumbH}px`;
+        place();
+    }
+
+    thumb.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        thumb.setPointerCapture(e.pointerId);
+        drag = { y: e.clientY, start: lenis.targetScroll };
+        bar.classList.add("is-dragging");
+    });
+
+    thumb.addEventListener("pointermove", (e) => {
+        if (!drag) return;
+        const target = clamp(drag.start + (e.clientY - drag.y) * (limit() / travel));
+        lenis.scrollTo(target, { lerp: 0.2 });   // or { immediate: true } for a raw feel
+        place();
+    });
+
+    const end = () => {
+        drag = null;
+        bar.classList.remove("is-dragging");
+    };
+    thumb.addEventListener("pointerup", end);
+    thumb.addEventListener("pointercancel", end);
+
+    // Clicking the track jumps there.
+    bar.addEventListener("pointerdown", (e) => {
+        if (e.target !== bar || e.button !== 0) return;
+        lenis.scrollTo(clamp(((e.clientY - thumbH / 2) / travel) * limit()), { duration: 1.2 });
+    });
+
+    lenis.on("scroll", place);
+    window.addEventListener("resize", measure);
+    new ResizeObserver(measure).observe(document.body);   // page height changes (images, re-sampling)
+    measure();
+}
+
 /* ------------------------------------------------------------
    Main
    ------------------------------------------------------------ */
@@ -190,10 +259,30 @@ export function createMotion({ reducedMotion = false, quality = "high" } = {}) {
 
     let lenis = null;
     if (animate && Lenis) {
-        lenis = new Lenis({ lerp: 0.085, wheelMultiplier: 0.95, smoothWheel: true });
+        lenis = new Lenis({
+            lerp: 0.085,
+            wheelMultiplier: 0.95,
+            smoothWheel: true,
+            syncTouch: true,        // finger scrolling goes through Lenis too
+            syncTouchLerp: 0.075    // how much the scroll glides after a flick (lower = longer glide)
+        });
         lenis.on("scroll", ScrollTrigger.update);
         gsap.ticker.add((time) => lenis.raf(time * 1000));
         lenis.stop();
+
+        // Mouse/trackpad users only; touch devices keep their overlay scrollbars.
+        if (window.matchMedia("(pointer: fine)").matches) createScrollbar(lenis);
+
+        window.addEventListener("keydown", (e) => {
+            if (!lenis || lenis.isStopped || e.target.closest("input, textarea, [contenteditable]")) return;
+            const page = window.innerHeight * 0.85;
+            const map = { ArrowDown: 80, ArrowUp: -80, PageDown: page, PageUp: -page, " ": e.shiftKey ? -page : page };
+            if (e.key === "Home") { e.preventDefault(); lenis.scrollTo(0); return; }
+            if (e.key === "End")  { e.preventDefault(); lenis.scrollTo("bottom"); return; }
+            if (map[e.key] == null) return;
+            e.preventDefault();
+            lenis.scrollTo(lenis.targetScroll + map[e.key]);
+        });
     }
 
     const sections = [...document.querySelectorAll("main > section")];
