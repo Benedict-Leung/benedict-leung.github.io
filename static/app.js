@@ -45,7 +45,7 @@ if (menuBtn && mobileMenu) {
    ============================================================ */
 
 const SETTINGS_KEY = "bl-site-settings";
-const DEFAULTS = { quality: "low", readability: "high" };
+const DEFAULTS = { quality: "low", readability: "high", annotations: "on" };
 
 const OPTIONS = {
     quality: { label: "Graphics", choices: [["high", "High"], ["low", "Low"]],
@@ -53,7 +53,9 @@ const OPTIONS = {
      },
     readability: { label: "Readability", choices: [["standard", "Standard"], ["high", "High contrast"]],
         // hint: "Dims the background behind the text and brightens the text."
-     }
+     },
+    // Hand-drawn pen marks (circles, underlines, notes) over the page.
+    annotations: { label: "Pen annotations", choices: [["on", "Shown"], ["off", "Hidden"]] }
 };
 
 function readSettings() {
@@ -77,6 +79,7 @@ function applyClasses(state) {
     const root = document.documentElement;
     root.classList.toggle("q-low", state.quality === "low");
     root.classList.toggle("read-high", state.readability === "high");
+    root.classList.toggle("annot-off", state.annotations === "off");
 }
 
 // Read and apply at once (called before the page is measured).
@@ -360,22 +363,77 @@ const loadingManager = new THREE.LoadingManager();
 const progressBar = document.getElementById('progress-bar');
 const preloader = document.getElementById('preloader');
 
+const prePct = document.getElementById('pre-pct');
+const preStatus = document.getElementById('pre-status');
+const preEnter = document.getElementById('pre-enter');
+
+// The counter follows the textures, but eases toward them so it
+// does not jump in big steps.
+const loadState = { shown: 0 };
 loadingManager.onProgress = (url, loaded, total) => {
-    if (progressBar) progressBar.style.width = (loaded / total) * 100 + '%';
+    const pct = (loaded / total) * 100;
+    if (progressBar) progressBar.style.width = pct + '%';
+    gsap.to(loadState, {
+        shown: pct, duration: 0.6, ease: "power2.out", overwrite: true,
+        onUpdate: () => { if (prePct) prePct.textContent = String(Math.round(loadState.shown)).padStart(3, "0"); }
+    });
 };
 
 // Textures and fonts must both be ready: the headlines are split into
-// lines, which needs the real font metrics.
-loadingManager.onLoad = () => motion.ready.then(startIntro);
+// lines, which needs the real font metrics. Then the visitor chooses
+// how to enter; the intro starts on that click.
+loadingManager.onLoad = () => motion.ready.then(showEnter);
+
+function showEnter() {
+    if (prePct) prePct.textContent = "100";
+    if (preStatus) preStatus.textContent = "System ready";
+    if (!preEnter) { startIntro(); return; }
+    preEnter.hidden = false;
+    let entered = false;
+    preEnter.querySelectorAll("button").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            if (entered) return;
+            entered = true;
+            // audio.js may already have switched sound on at this
+            // press (a saved "on"), so "without sound" turns it off.
+            if (btn.dataset.sound === "on") { if (!sound.on) sound.enable(); }
+            else if (sound.on) sound.disable();
+            startIntro();
+        });
+    });
+    const first = preEnter.querySelector("button");
+    if (first) first.focus({ preventScroll: true });
+}
+
+/* --- Local time (hero meta and footer) --- */
+function startClock() {
+    const clocks = document.querySelectorAll(".js-clock");
+    const zones = document.querySelectorAll(".js-tz");
+    if (!clocks.length) return;
+    const zone = "America/Toronto";
+    let timeFmt, tzFmt;
+    try {
+        timeFmt = new Intl.DateTimeFormat("en-CA", { timeZone: zone, hour: "2-digit", minute: "2-digit", hour12: false });
+        tzFmt = new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "short" });
+    } catch (e) { return; }
+    const tick = () => {
+        const now = new Date();
+        const time = timeFmt.format(now);
+        clocks.forEach((el) => { el.textContent = time; });
+        const part = tzFmt.formatToParts(now).find((p) => p.type === "timeZoneName");
+        zones.forEach((el) => { el.textContent = `${part ? part.value : "ET"} · Toronto time`; });
+    };
+    tick();
+    setInterval(tick, 15000);
+}
+startClock();
 
 function startIntro() {
     if (planetHorizon) planetHorizon.style.transition = 'none';
 
     gsap.set("nav", { y: -30, opacity: 0 });
-    gsap.set(".deco-line-vertical", { scaleY: 0, opacity: 0, transformOrigin: "top" });
-    gsap.set(".sys-status", { x: 20, opacity: 0 });
-    gsap.set(".hud-footer", { y: 20, opacity: 0 });
-    gsap.set(".scroll-indicator", { opacity: 0 });
+    gsap.set("#hero .hero-bottom", { y: 24, opacity: 0 });
+    gsap.set(".frame", { opacity: 0 });
     gsap.set("#planet-horizon", { opacity: 0, scale: 0.8 });
 
     if (preloader) preloader.classList.add('loaded');
@@ -394,7 +452,9 @@ function startIntro() {
             prevPos.copy(camPos);
             initScroll();
             motion.start();
-            sound.showHint();
+            // The visitor already chose sound on or off at the gate,
+            // so the "Click for sound" bubble only shows without it.
+            if (!preEnter) sound.showHint();
         }
     });
 
@@ -436,10 +496,8 @@ function startIntro() {
       .to("nav", { y: 0, opacity: 1, duration: 1.0, ease: "power1.out" }, 5.3)
       .add(motion.heroIntro(), 5.4)
       .call(() => document.documentElement.classList.remove("intro-clear"), null, 5.8)
-      .to(".deco-line-vertical", { scaleY: 1, opacity: 1, duration: 0.8, ease: "power1.out" }, 5.7)
-      .to(".sys-status", { x: 0, opacity: 1, duration: 0.8, ease: "power1.out" }, 5.9)
-      .to(".hud-footer", { y: 0, opacity: 1, duration: 0.8, ease: "power1.out" }, 6.1)
-      .to(".scroll-indicator", { opacity: 0.5, duration: 1.0, ease: "power1.out" }, 6.3);
+      .to(".frame", { opacity: 1, duration: 1.2, ease: "power1.out" }, 5.6)
+      .to("#hero .hero-bottom", { y: 0, opacity: 1, duration: 1.0, ease: "power2.out" }, 6.0);
 
     if (REDUCED_MOTION) tl.progress(1);
 }
@@ -1463,6 +1521,8 @@ createSettingsPanel({
         }
         // Text colours changed: the stardust is sampled from them.
         if (key === "readability") motion.refresh();
+        // Notes appear or vanish, so the layout (and the dust) shifts.
+        if (key === "annotations") motion.refresh();
     }
 });
 

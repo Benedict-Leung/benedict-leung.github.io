@@ -258,6 +258,255 @@ function createScrollbar(lenis) {
 }
 
 /* ------------------------------------------------------------
+   Pen annotations
+   ------------------------------------------------------------
+   A nod to pen-based annotation: gold marks drawn by hand over
+   the page. Put a class on any word or phrase:
+
+   - .annot-circle    a loose circle around it
+   - .annot-underline a quick underline (one per line of text)
+   - .annot-note      (a span of text) a handwritten note
+
+   The marks are SVG paths built to the exact size of the words,
+   so the stroke keeps an even width. The pen is tied to the
+   scroll: each mark draws as you scroll down past it and lifts
+   off again as you scroll back up.
+   Settings → "Pen annotations" hides them (html.annot-off).
+   ------------------------------------------------------------ */
+
+// Small seeded random, so a mark looks the same on every visit.
+function seeded(seed) {
+    let t = seed >>> 0;
+    return () => {
+        t += 0x6D2B79F5;
+        let r = Math.imul(t ^ (t >>> 15), 1 | t);
+        r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+        return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+// A smooth path through points (midpoint quadratic curves).
+function smoothPath(pts) {
+    let d = `M${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`;
+    for (let i = 1; i < pts.length - 1; i++) {
+        const [x, y] = pts[i];
+        const mx = (x + pts[i + 1][0]) / 2;
+        const my = (y + pts[i + 1][1]) / 2;
+        d += ` Q${x.toFixed(1)} ${y.toFixed(1)} ${mx.toFixed(1)} ${my.toFixed(1)}`;
+    }
+    const last = pts[pts.length - 1];
+    return d + ` L${last[0].toFixed(1)} ${last[1].toFixed(1)}`;
+}
+
+// A loose ellipse that overshoots its start, like a quick pen
+// circle. (x, y, w, h) is the box of the word.
+function circlePath(x, y, w, h, rand) {
+    const padX = Math.max(10, h * 0.32);
+    const padY = Math.max(6, h * 0.16);
+    const cx = x + w / 2, cy = y + h / 2 + h * 0.04;
+    const rx = w / 2 + padX, ry = h / 2 + padY;
+    const tilt = (-3 + rand() * 2) * Math.PI / 180;
+    const start = Math.PI * (0.95 + rand() * 0.1);
+    const sweep = Math.PI * 2 + 0.5 + rand() * 0.3;
+    const n = 56;
+    const pts = [];
+    for (let i = 0; i <= n; i++) {
+        const t = i / n;
+        const a = start + sweep * t;
+        // Drift outward a little, so the end does not meet the start.
+        const grow = 1 + t * 0.07 + (rand() - 0.5) * 0.012;
+        const ex = Math.cos(a) * rx * grow;
+        const ey = Math.sin(a) * ry * (grow - t * 0.1);
+        pts.push([cx + ex * Math.cos(tilt) - ey * Math.sin(tilt), cy + ex * Math.sin(tilt) + ey * Math.cos(tilt)]);
+    }
+    return smoothPath(pts);
+}
+
+// A quick underline with a slight rise, under one line of text.
+function underlinePath(x, y, w, h, rand) {
+    const base = y + h * 0.96;
+    const n = 14;
+    const pts = [];
+    for (let i = 0; i <= n; i++) {
+        const t = i / n;
+        const px = x - w * 0.02 + t * w * 1.05;
+        const py = base - t * h * 0.05 + Math.sin(t * Math.PI * 1.6 + rand()) * h * 0.025;
+        pts.push([px, py]);
+    }
+    return smoothPath(pts);
+}
+
+function createAnnotations({ animate = true } = {}) {
+    const root = document.documentElement;
+    if (animate) root.classList.add("has-annot");
+    // Each mark keeps its own progress: p (how far scrolling has drawn
+    // it, 0..1). The hero mark also has intro (drawn in after the
+    // intro, by time) and out (erased as the hero scrolls away).
+    const marks = [];     // { host, kind, svg, paths, p, intro, out, hero }
+    const notes = [...document.querySelectorAll(".annot-note")];
+    // Notes are crisp text, not dust: they fade with the mask instead.
+    notes.forEach((n) => { n.dataset.dust = "off"; });
+    const penEase = gsap.parseEase("power1.inOut");
+
+    // Hosts: after the headlines are split, a class on a word lives
+    // on that word's span (.w), so query again each layout.
+    const hosts = () => [...document.querySelectorAll(".annot-circle, .annot-underline")]
+        .filter((el) => !el.querySelector(".annot-circle, .annot-underline"));
+
+    // Show the drawn part of each stroke. With several strokes (an
+    // underline over two lines), they are drawn one after another.
+    function apply(mark) {
+        const amount = mark.hero ? Math.min(mark.intro, 1 - mark.out) : mark.p;
+        const n = mark.paths.length;
+        mark.paths.forEach((path, k) => {
+            const part = Math.min(1, Math.max(0, amount * n - k));
+            path.style.strokeDashoffset = (1 - penEase(part)).toFixed(4);
+        });
+    }
+
+    function layout() {
+        hosts().forEach((host, i) => {
+            const kind = host.classList.contains("annot-circle") ? "circle" : "underline";
+            // Draw in the nearest heading or paragraph, so the mark can
+            // span line breaks and is clipped by the same masks.
+            const anchor = host.closest("h1, h2, h3, p, li") || host.parentElement;
+            if (getComputedStyle(anchor).position === "static") anchor.style.position = "relative";
+            let mark = marks.find((m) => m.host === host);
+            if (!mark) {
+                const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+                svg.setAttribute("class", `annot annot--${kind}`);
+                svg.setAttribute("aria-hidden", "true");
+                svg.setAttribute("focusable", "false");
+                anchor.appendChild(svg);
+                const full = animate ? 0 : 1;
+                mark = { host, kind, svg, paths: [], p: full, intro: full, out: 0, hero: !!host.closest("#hero") };
+                marks.push(mark);
+            }
+            const ar = anchor.getBoundingClientRect();
+            const fs = parseFloat(getComputedStyle(host).fontSize) || 16;
+            const rand = seeded(1013 + i * 7919);
+            const rects = kind === "circle"
+                ? [host.getBoundingClientRect()]
+                : [...host.getClientRects()].filter((r) => r.width > 2);
+            const ds = rects.map((r) => {
+                const x = r.left - ar.left, y = r.top - ar.top;
+                return kind === "circle"
+                    ? circlePath(x, y, r.width, r.height, rand)
+                    : underlinePath(x, y, r.width, r.height, rand);
+            });
+            const sw = Math.min(3.4, Math.max(1.5, fs * (kind === "circle" ? 0.022 : 0.05)));
+            const W = Math.max(1, ar.width), H = Math.max(1, ar.height);
+            mark.svg.setAttribute("width", W);
+            mark.svg.setAttribute("height", H);
+            mark.svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+            mark.svg.style.strokeWidth = sw.toFixed(2);
+            mark.svg.innerHTML = ds.map((d) => `<path pathLength="1" d="${d}"/>`).join("");
+            mark.paths = [...mark.svg.querySelectorAll("path")];
+            apply(mark);
+        });
+        if (!animate) notes.forEach((n) => n.classList.add("is-drawn"));
+    }
+
+    // Called once scrolling is unlocked (after the intro). Every mark
+    // is tied to the scroll position (scrub), so the pen draws as you
+    // scroll down and lifts off again as you scroll back up.
+    function start() {
+        if (!animate) return;
+        marks.forEach((mark) => {
+            if (mark.hero) {
+                // Already on screen when the page opens: the pen draws it
+                // once the intro ends, then erases it with the scroll as
+                // the hero leaves.
+                gsap.to(mark, { intro: 1, duration: 1.3, delay: 0.2, ease: "none", onUpdate: () => apply(mark) });
+                gsap.to(mark, {
+                    out: 1,
+                    ease: "none",
+                    onUpdate: () => apply(mark),
+                    scrollTrigger: { trigger: "#hero", start: "top top", end: "45% top", scrub: 0.6 }
+                });
+                return;
+            }
+            gsap.fromTo(mark, { p: 0 }, {
+                p: 1,
+                ease: "none",
+                onUpdate: () => apply(mark),
+                scrollTrigger: {
+                    trigger: mark.host,
+                    start: "top 92%",
+                    end: "top 62%",
+                    scrub: 0.6,
+                    invalidateOnRefresh: true
+                }
+            });
+        });
+        // Notes are written out left to right, also with the scroll.
+        notes.forEach((note) => {
+            gsap.fromTo(note,
+                { clipPath: "inset(-20% 100% -20% -5%)" },
+                {
+                    clipPath: "inset(-20% -5% -20% -5%)",
+                    ease: "none",
+                    scrollTrigger: { trigger: note, start: "top 90%", end: "top 66%", scrub: 0.6 }
+                });
+        });
+    }
+
+    return { layout, start };
+}
+
+/* ------------------------------------------------------------
+   Footer name
+   ------------------------------------------------------------
+   "Benedict Leung", sized to span the full width, letters rising
+   into place as the bottom of the page comes into view.
+   ------------------------------------------------------------ */
+function createFootWord({ animate = true } = {}) {
+    const el = document.querySelector(".foot-word");
+    if (!el) return { fit() {}, start() {} };
+
+    // One span per word, one per letter inside it.
+    const words = el.textContent.trim().split(/\s+/);
+    el.textContent = "";
+    const chars = [];
+    words.forEach((word, wi) => {
+        const w = document.createElement("span");
+        w.className = "fw-w";
+        for (const ch of word) {
+            const c = document.createElement("span");
+            c.className = "fw-c";
+            c.textContent = ch;
+            w.appendChild(c);
+            chars.push(c);
+        }
+        el.appendChild(w);
+        if (wi < words.length - 1) el.appendChild(document.createTextNode(" "));
+    });
+
+    function fit() {
+        const avail = el.parentElement.clientWidth;
+        if (!avail) return;
+        el.style.setProperty("--fit", "100px");
+        // Width of the letters themselves, not of the block.
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const natural = range.getBoundingClientRect().width;
+        if (natural) el.style.setProperty("--fit", `${(100 * avail / natural * 0.995).toFixed(2)}px`);
+    }
+
+    function start() {
+        if (!animate) return;
+        gsap.fromTo(chars, { yPercent: 105 }, {
+            yPercent: 0,
+            ease: "none",
+            stagger: 0.06,
+            scrollTrigger: { trigger: el, start: "top bottom", end: "bottom bottom", scrub: 0.8 }
+        });
+    }
+
+    return { fit, start };
+}
+
+/* ------------------------------------------------------------
    Main
    ------------------------------------------------------------ */
 export function createMotion({ reducedMotion = false, quality = "high" } = {}) {
@@ -329,15 +578,14 @@ export function createMotion({ reducedMotion = false, quality = "high" } = {}) {
     }
     const fallback = animate && !dust;
 
-    const ITEMS = ".pub-row, .thesis, .project";
+    const ITEMS = ".paper-row, .thesis, .project";
     const followOf = (block) => {
         const out = [];
         const viewAll = block.querySelector(":scope > .section-head > .view-all");
         if (viewAll) out.push(viewAll);
         [...block.children].forEach((c) => {
-            if (c.matches(".section-head, .content-block, br, .scrub-text, .pub-index, .pub-head, .gallery, .about-stage")) return;
-            if (c.matches(".contact-links")) out.push(...c.children);
-            else out.push(c);
+            if (c.matches(".section-head, .content-block, br, .scrub-text, .paper-index, .paper-head, .gallery, .about-stage")) return;
+            out.push(c);
         });
         return out;
     };
@@ -374,8 +622,9 @@ export function createMotion({ reducedMotion = false, quality = "high" } = {}) {
     // fallback font (wrong line breaks, wrong dust positions).
     const fontsLoaded = document.fonts
         ? Promise.all([
-            document.fonts.load('400 1em "Playfair Display"'),
-            document.fonts.load('italic 400 1em "Playfair Display"'),
+            document.fonts.load('400 1em "Instrument Serif"'),
+            document.fonts.load('italic 400 1em "Instrument Serif"'),
+            document.fonts.load('500 1em "Caveat"'),
             document.fonts.ready
         ]).catch(() => {})
         : Promise.resolve();
@@ -405,12 +654,22 @@ export function createMotion({ reducedMotion = false, quality = "high" } = {}) {
     let skillsTimer = 0;
     window.addEventListener("resize", () => {
         clearTimeout(skillsTimer);
-        skillsTimer = setTimeout(layoutSkills, 150);
+        skillsTimer = setTimeout(() => {
+            layoutSkills();
+            annotations.layout();
+            footWord.fit();
+        }, 150);
     });
+
+    // Pen annotations and the footer name (both below this function).
+    const annotations = createAnnotations({ animate });
+    const footWord = createFootWord({ animate });
 
     const ready = Promise.race([fontsLoaded, timeout]).then(() => {
         splitAll();
         layoutSkills();
+        annotations.layout();
+        footWord.fit();
         if (dust) dust.sample();
         if (fallback) setInitialStates();
     });
@@ -452,8 +711,7 @@ export function createMotion({ reducedMotion = false, quality = "high" } = {}) {
         }
         heroExit
             .to(heroBlock, { opacity: 0, y: -60, ease: "power1.in" }, 0)
-            .to("#hero .hud-footer, #hero .scroll-indicator, #hero .sys-status, #hero .deco-line-vertical",
-                { opacity: 0, ease: "none", duration: 0.35 }, 0);
+            .to("#hero .hero-bottom", { opacity: 0, ease: "none", duration: 0.35 }, 0);
 
         blocks.filter((b) => b !== heroBlock).forEach((block) => {
             const head = block.querySelector(":scope > .section-head") || block;
@@ -776,7 +1034,7 @@ export function createMotion({ reducedMotion = false, quality = "high" } = {}) {
         // Over the hero, the route hides if it would sit on the hero's
         // bottom chrome (the swipe cue on phones). It shows once the
         // hero scrolls away. While hidden it cannot be clicked.
-        const heroChrome = [...document.querySelectorAll("#hero .hud-footer, #hero .scroll-indicator")];
+        const heroChrome = [...document.querySelectorAll("#hero .hero-bottom")];
         const clashes = () => {
             const r = root.getBoundingClientRect();
             return heroChrome.some((el) => {
@@ -806,7 +1064,7 @@ export function createMotion({ reducedMotion = false, quality = "high" } = {}) {
 
         // The hero's bottom chrome fades as you leave the first screen.
         if (animate && !fallback) {
-            gsap.to("#hero .hud-footer, #hero .scroll-indicator, #hero .sys-status, #hero .deco-line-vertical", {
+            gsap.to("#hero .hero-bottom", {
                 opacity: 0, ease: "none",
                 scrollTrigger: { trigger: "#hero", start: "top top", end: "25% top", scrub: 0.4 }
             });
@@ -850,7 +1108,10 @@ export function createMotion({ reducedMotion = false, quality = "high" } = {}) {
         setQuality(level) { if (dust) dust.setQuality(level); },
         refresh() {
             layoutSkills();
+            annotations.layout();
+            footWord.fit();
             if (dust) dust.sample();
+            ScrollTrigger.refresh();
         },
 
         // The hero's entrance, slotted into the intro timeline in app.js.
@@ -868,6 +1129,8 @@ export function createMotion({ reducedMotion = false, quality = "high" } = {}) {
             buildChrome();
             buildSkills();
             buildAbout(about, { lenis, dust });
+            annotations.start();
+            footWord.start();
             ScrollTrigger.refresh();
         }
     };
