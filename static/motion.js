@@ -512,9 +512,21 @@ function createFootWord({ animate = true } = {}) {
 export function createMotion({ reducedMotion = false, quality = "high" } = {}) {
     const animate = !reducedMotion;
 
-    // The intro always plays from the top of the page.
+    // The intro always plays from the top of the page. A #hash in the
+    // address (e.g. #about) would make the browser jump to that section
+    // as the page loads, so it is removed first.
     if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+    if (location.hash) history.replaceState(null, "", location.pathname + location.search);
     window.scrollTo(0, 0);
+
+    // Until the intro is over, in-page links (nav, "View work") do
+    // nothing. Otherwise the browser jumps to the section mid-intro.
+    let started = false;
+    document.addEventListener("click", (e) => {
+        if (started) return;
+        const a = e.target.closest && e.target.closest('a[href^="#"]');
+        if (a) e.preventDefault();
+    }, true);
 
     let lenis = null;
     if (animate && Lenis) {
@@ -1116,6 +1128,10 @@ export function createMotion({ reducedMotion = false, quality = "high" } = {}) {
 
         // The hero's entrance, slotted into the intro timeline in app.js.
         heroIntro() {
+            // Back to the top in case anything moved the page under
+            // the preloader (scroll restore, a late #hash jump).
+            if (lenis) lenis.scrollTo(0, { immediate: true, force: true });
+            window.scrollTo(0, 0);
             const tl = gsap.timeline();
             if (dust) tl.call(() => dust.begin(), null, 0);
             else if (fallback && heroBlock) tl.add(revealBlock(heroBlock), 0);
@@ -1124,6 +1140,7 @@ export function createMotion({ reducedMotion = false, quality = "high" } = {}) {
 
         // Called once the intro has finished and scrolling is unlocked.
         start() {
+            started = true;
             if (lenis) lenis.start();
             if (fallback) buildFallbackScroll();
             buildChrome();
@@ -1366,6 +1383,14 @@ function prepareAbout({ animate = true } = {}) {
     });
 
     scenes[0].classList.add("is-current");
+
+    // Hide every scene now, under the preloader. Until buildAbout runs
+    // (after the intro) the scenes would otherwise sit stacked and fully
+    // visible, and show through if the page is not at the top during
+    // the intro (a #about link, a restored scroll position).
+    scenes.forEach(hideScene);
+    const head = section.querySelector(".about-head");
+    if (head) gsap.set(head, { opacity: 0, y: 16 });
     return { section, scenes };
 }
 

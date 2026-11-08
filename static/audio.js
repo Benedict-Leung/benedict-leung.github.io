@@ -4,24 +4,36 @@
    No audio files: every sound is built from oscillators and
    noise, so there is nothing to download or license.
 
-   Sound is OFF until the visitor turns it on with the nav button
-   ("SOUND OFF" / "SOUND ON", like nesilnoble.com). Browsers only
-   allow audio after a click or key press, and a quiet page is the
-   polite default. The choice is saved in this browser; if it was
-   on, sound resumes at the visitor's first click or key press.
+   Sound is OFF until the visitor chooses. On entering, the
+   preloader's "Enter with sound" / "Enter without sound" buttons
+   decide (app.js); later the nav button ("SOUND OFF" / "SOUND ON",
+   like nesilnoble.com) switches it. Browsers only allow audio after
+   a click or key press, and a quiet page is the polite default.
+   Nothing plays from any other click, so the loading screen stays
+   silent until one of the enter buttons is pressed.
 
    What plays:
    - Music: a slow ambient pad. Each planet has its own chord, and
      the pad drifts to the new chord as the camera flies there.
      Soft high notes sparkle now and then, like distant stars.
-   - Warp: a rushing wind that grows with the camera's speed.
-   - About: a small bell for each new scene; a rising swell while
-     a big line zooms out; a shimmer of crackles while the stage
-     turns to stardust.
+   - Flight between planets (all grow with the camera's speed):
+       a deep stereo whoosh (brown noise through slowly moving
+       resonant filters, no hiss), an engine drone tuned to the
+       planet's chord that rises in pitch like a doppler swoop,
+       and a high shimmer of chord tones washed in reverb.
+       Leaving a planet starts a rising warp-up glide; arriving
+       ends with a soft low thump and a few star notes.
+   - About: a small bell for each new scene; a deep rising swell
+     (soft noise and two tones a fifth apart) while a big line
+     zooms out; while the stage turns to stardust, a soft rising
+     breath and a cloud of tiny star notes drifting in the reverb.
+   - Sunrise (intro, as the sun rises into view): a deep swell and
+     a rising rush of soft noise that open into a warm, ringing
+     chord with a few star notes.
    - Interface: a faint tick on hover and a soft click on press.
 
    Inputs:
-   - app.js calls setPlanet(key), setWarp(0..1) and showHint().
+   - app.js calls setPlanet(key), setWarp(0..1), sunrise() and showHint().
    - about.js sends "bl:sound" events on window:
        { type: "scene", index } | { type: "zoom", p } | { type: "burst", p }
    ============================================================ */
@@ -51,9 +63,6 @@ const BELLS = [N.D5, N.E5, N.F$5, N.A5, N.B5, N.D6];
 
 const MASTER_ON = 0.75;
 
-function loadPref() {
-    try { return localStorage.getItem(KEY) === "on"; } catch (e) { return false; }
-}
 function savePref(on) {
     try { localStorage.setItem(KEY, on ? "on" : "off"); } catch (e) { /* private mode */ }
 }
@@ -62,15 +71,19 @@ export function createAudio() {
     const AC = window.AudioContext || window.webkitAudioContext;
     let ctx = null;
     let on = false;
-    let wanted = loadPref();     // saved as on: start at the first gesture
     let planet = "overview";
 
     // Nodes, made in init().
-    let master, sfx, verbIn, noise, crackle;
+    let master, sfx, verbIn, noise, brown;
     let pad = null;              // current chord voices
-    let warpGain, warpBand, rumbleGain;
-    let zoomGain, zoomBand, zoomTone, zoomToneGain;
-    let burstGain;
+    let whooshGain, whooshFilters = [], whooshLfoAmt;
+    let droneGain, droneFilter, droneOscs = [];
+    let shimmerGain, shimmerOscs = [];
+    let warpArmed = false;
+    let lastDepart = -10;
+    let zoomGain, zoomBand, zoomTone, zoomTone2, zoomToneGain;
+    let burstGain, burstBand;
+    let grainAcc = 0;
     let lastWarp = -1;
     let sparkleTimer = 0;
     let lastBurst = 0;
@@ -95,19 +108,22 @@ export function createAudio() {
         return buf;
     }
 
-    // Sparse little clicks: the sound of dust crackling.
-    function crackleBuffer(seconds) {
+    // Brown noise: white noise with the highs rolled off, a deep
+    // soft rush instead of a hiss.
+    function brownBuffer(seconds) {
         const len = Math.floor(ctx.sampleRate * seconds);
-        const buf = ctx.createBuffer(2, len, ctx.sampleRate);
-        for (let ch = 0; ch < 2; ch++) {
-            const d = buf.getChannelData(ch);
-            for (let i = 0; i < len; i++) {
-                if (Math.random() < 0.0016) {
-                    const amp = (0.3 + Math.random() * 0.7) * (Math.random() < 0.5 ? -1 : 1);
-                    const n = 30 + (Math.random() * 120) | 0;
-                    for (let k = 0; k < n && i + k < len; k++) d[i + k] += amp * Math.exp(-k / (n / 5)) * (Math.random() * 2 - 1);
-                }
-            }
+        const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+        const d = buf.getChannelData(0);
+        let last = 0;
+        for (let i = 0; i < len; i++) {
+            last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02;
+            d[i] = last * 3.5;
+        }
+        // Fade the ends together so the loop does not click.
+        const x = Math.min(len >> 1, Math.floor(ctx.sampleRate * 0.05));
+        for (let i = 0; i < x; i++) {
+            const k = i / x;
+            d[i] = d[i] * k + d[len - x + i] * (1 - k);
         }
         return buf;
     }
@@ -152,40 +168,117 @@ export function createAudio() {
         sfx.connect(sfxSend);
 
         noise = noiseBuffer(3);
-        crackle = crackleBuffer(4);
+        brown = brownBuffer(6);
 
-        // Warp: rushing wind plus a low rumble, both silent until moving.
-        warpBand = ctx.createBiquadFilter();
-        warpBand.type = "bandpass";
-        warpBand.Q.value = 0.8;
-        warpBand.frequency.value = 300;
-        warpGain = gainNode(0, sfx);
-        loop(noise).connect(warpBand).connect(warpGain);
-        const rumble = ctx.createOscillator();
-        rumble.frequency.value = 46;
-        rumbleGain = gainNode(0, sfx);
-        rumble.connect(rumbleGain);
-        rumble.start();
+        // Flight: everything below is silent until the camera moves.
+        // Most of it is sent into the long reverb, so it sounds far
+        // away and wide, like space, not close like wind.
+        const warpBus = gainNode(1, sfx);
+        warpBus.connect(gainNode(0.9, verbIn));
+
+        // 1. Whoosh: two brown-noise streams, left and right, each
+        //    through a resonant lowpass that drifts slowly.
+        whooshGain = gainNode(0, warpBus);
+        const wobble = ctx.createOscillator();
+        wobble.frequency.value = 0.13;
+        whooshLfoAmt = ctx.createGain();
+        whooshLfoAmt.gain.value = 60;
+        wobble.connect(whooshLfoAmt);
+        wobble.start();
+        [-0.75, 0.75].forEach((side, i) => {
+            const src = ctx.createBufferSource();
+            src.buffer = brown;
+            src.loop = true;
+            src.start(0, i * 2.7);
+            const f = ctx.createBiquadFilter();
+            f.type = "lowpass";
+            f.Q.value = 7;
+            f.frequency.value = 160;
+            whooshLfoAmt.connect(f.frequency);
+            const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+            src.connect(f);
+            if (pan) { pan.pan.value = side; f.connect(pan).connect(whooshGain); }
+            else f.connect(whooshGain);
+            whooshFilters.push(f);
+        });
+
+        // 2. Engine drone: two detuned saws and a sine, an octave
+        //    under the chord's root, through a lowpass that opens up.
+        droneFilter = ctx.createBiquadFilter();
+        droneFilter.type = "lowpass";
+        droneFilter.Q.value = 3;
+        droneFilter.frequency.value = 90;
+        droneGain = gainNode(0, warpBus);
+        droneFilter.connect(droneGain);
+        const root = (CHORDS[planet] || CHORDS.overview)[0] / 2;
+        // The octave-up saw lets laptop and phone speakers carry the hum.
+        [["sawtooth", 1, -7], ["sawtooth", 1, 7], ["sawtooth", 2, 4], ["sine", 0.5, 0]].forEach(([type, mult, cents]) => {
+            const o = ctx.createOscillator();
+            o.type = type;
+            o.frequency.value = root * mult;
+            o.detune.value = cents;
+            o._mult = mult;
+            o._cents = cents;
+            o.connect(gainNode(type === "sine" ? 0.9 : mult === 2 ? 0.22 : 0.35, droneFilter));
+            o.start();
+            droneOscs.push(o);
+        });
+
+        // 3. Shimmer: high chord tones with a slow vibrato, almost
+        //    all reverb, like a far-off choir of stars.
+        shimmerGain = gainNode(0, verbIn);
+        shimmerGain.connect(gainNode(0.25, sfx));
+        const vib = ctx.createOscillator();
+        vib.frequency.value = 4.2;
+        const vibAmt = gainNode(9);
+        vib.connect(vibAmt);
+        vib.start();
+        (CHORDS[planet] || CHORDS.overview).forEach((f, i) => {
+            const o = ctx.createOscillator();
+            o.type = "sine";
+            o.frequency.value = f * (i < 2 ? 4 : 2);
+            o._mult = i < 2 ? 4 : 2;
+            vibAmt.connect(o.detune);
+            const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+            const g = gainNode(0.25);
+            o.connect(g);
+            if (pan) { pan.pan.value = (i / 3) * 1.4 - 0.7; g.connect(pan).connect(shimmerGain); }
+            else g.connect(shimmerGain);
+            o.start();
+            shimmerOscs.push(o);
+        });
 
         // Zoom: a rising, airy swell with a faint tone under it.
+        // Deep noise through a resonant lowpass that rises, plus two
+        // soft tones a fifth apart. Half of it goes to the reverb.
         zoomBand = ctx.createBiquadFilter();
-        zoomBand.type = "bandpass";
-        zoomBand.Q.value = 1.4;
+        zoomBand.type = "lowpass";
+        zoomBand.Q.value = 6;
+        zoomBand.frequency.value = 250;
         zoomGain = gainNode(0, sfx);
-        loop(noise).connect(zoomBand).connect(zoomGain);
+        zoomGain.connect(gainNode(0.6, verbIn));
+        loop(brown).connect(zoomBand).connect(zoomGain);
+        zoomToneGain = gainNode(0, sfx);
+        zoomToneGain.connect(gainNode(0.8, verbIn));
         zoomTone = ctx.createOscillator();
         zoomTone.type = "sine";
         zoomTone.frequency.value = 110;
-        zoomToneGain = gainNode(0, sfx);
         zoomTone.connect(zoomToneGain);
         zoomTone.start();
+        zoomTone2 = ctx.createOscillator();
+        zoomTone2.type = "sine";
+        zoomTone2.frequency.value = 165;
+        zoomTone2.connect(gainNode(0.6, zoomToneGain));
+        zoomTone2.start();
 
-        // Burst: high crackles while the stage turns to dust.
-        const burstHp = ctx.createBiquadFilter();
-        burstHp.type = "highpass";
-        burstHp.frequency.value = 2500;
+        // Burst: a soft breath that rises while the stage turns to
+        // dust (the star notes over it are made in burst()).
+        burstBand = ctx.createBiquadFilter();
+        burstBand.type = "bandpass";
+        burstBand.Q.value = 3;
+        burstBand.frequency.value = 400;
         burstGain = gainNode(0, sfx, verbIn);
-        loop(crackle).connect(burstHp).connect(burstGain);
+        loop(brown).connect(burstBand).connect(burstGain);
 
         setChord(planet, 0.5);
     }
@@ -238,6 +331,9 @@ export function createAudio() {
         oscs.push(sub);
 
         oscs.forEach((o) => o.start(t));
+        // The flight drone and shimmer glide to the new chord.
+        droneOscs.forEach((o) => o.frequency.setTargetAtTime(notes[0] / 2 * o._mult, t, 1.2));
+        shimmerOscs.forEach((o, i) => o.frequency.setTargetAtTime(notes[i % notes.length] * o._mult, t, 1.2));
         out.gain.setValueAtTime(0, t);
         out.gain.linearRampToValueAtTime(1, t + fade);
         pad = { gain: out, oscs, notes };
@@ -289,6 +385,110 @@ export function createAudio() {
         });
     }
 
+    // Leaving a planet: two tones a fifth apart glide up and fade,
+    // under a resonant sweep. Mostly reverb.
+    function depart() {
+        const t = now();
+        if (t - lastDepart < 0.8) return;
+        lastDepart = t;
+        const out = gainNode(0, sfx, verbIn);
+        out.gain.setValueAtTime(0, t);
+        out.gain.linearRampToValueAtTime(0.05, t + 0.5);
+        out.gain.exponentialRampToValueAtTime(0.0001, t + 2.6);
+        const f = ctx.createBiquadFilter();
+        f.type = "lowpass";
+        f.Q.value = 9;
+        f.frequency.setValueAtTime(300, t);
+        f.frequency.exponentialRampToValueAtTime(2600, t + 1.8);
+        f.connect(out);
+        const root = pad ? pad.notes[0] : N.D3;
+        [1, 1.5].forEach((m) => {
+            const o = ctx.createOscillator();
+            o.type = "triangle";
+            o.frequency.setValueAtTime(root * m, t);
+            o.frequency.exponentialRampToValueAtTime(root * m * 4, t + 2.2);
+            o.connect(f);
+            o.start(t);
+            o.stop(t + 2.8);
+        });
+    }
+
+    // Arriving: a soft low thump and a few star notes.
+    function arrive() {
+        const t = now();
+        const o = ctx.createOscillator();
+        o.frequency.setValueAtTime(70, t);
+        o.frequency.exponentialRampToValueAtTime(34, t + 1.4);
+        const g = gainNode(0, sfx);
+        g.connect(gainNode(0.5, verbIn));
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(0.16, t + 0.04);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 1.8);
+        o.connect(g);
+        o.start(t);
+        o.stop(t + 2);
+        [0, 0.18, 0.4].forEach((d) => setTimeout(() => { if (on) sparkle(0.03, 4); }, d * 1000));
+    }
+
+    // The sun rising in the intro. It swells for `rise` seconds, then
+    // opens into a warm chord that rings out in the reverb.
+    function sunrise(rise = 2.2) {
+        const t = now();
+        const peak = t + rise;
+        const chord = CHORDS.overview;
+
+        // A deep swell under it all (root and the octave below).
+        const sub = gainNode(0, sfx);
+        sub.connect(gainNode(0.4, verbIn));
+        sub.gain.setValueAtTime(0.0001, t);
+        sub.gain.exponentialRampToValueAtTime(0.6, peak);
+        sub.gain.exponentialRampToValueAtTime(0.0001, peak + 4);
+        [0.5, 0.25].forEach((m) => {
+            const o = ctx.createOscillator();
+            o.frequency.value = chord[0] * m;
+            o.connect(sub);
+            o.start(t);
+            o.stop(peak + 4.1);
+        });
+
+        // A rush of soft noise that rises and opens, like a breath in.
+        const src = ctx.createBufferSource();
+        src.buffer = brown;
+        const f = ctx.createBiquadFilter();
+        f.type = "lowpass";
+        f.Q.value = 8;
+        f.frequency.setValueAtTime(120, t);
+        f.frequency.exponentialRampToValueAtTime(1600, peak);
+        f.frequency.exponentialRampToValueAtTime(400, peak + 2.5);
+        const rush = gainNode(0, sfx, verbIn);
+        rush.gain.setValueAtTime(0.0001, t);
+        rush.gain.exponentialRampToValueAtTime(1.1, peak);
+        rush.gain.exponentialRampToValueAtTime(0.0001, peak + 2.5);
+        src.connect(f).connect(rush);
+        src.start(t, Math.random() * 2);
+        src.stop(peak + 2.6);
+
+        // The bloom: the chord an octave up, warm and slow to fade,
+        // mostly reverb, spread left to right.
+        chord.forEach((n, i) => {
+            const o = ctx.createOscillator();
+            o.type = "triangle";
+            o.frequency.value = n * 2;
+            o.detune.value = (Math.random() - 0.5) * 8;
+            const g = ctx.createGain();
+            g.gain.setValueAtTime(0, peak - 0.15);
+            g.gain.linearRampToValueAtTime(0.12, peak + 0.35);
+            g.gain.exponentialRampToValueAtTime(0.0001, peak + 5.5);
+            o.connect(g);
+            const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+            if (pan) { pan.pan.value = (i / (chord.length - 1)) * 1.2 - 0.6; g.connect(pan); pan.connect(verbIn); pan.connect(gainNode(0.5, sfx)); }
+            else { g.connect(verbIn); g.connect(gainNode(0.5, sfx)); }
+            o.start(peak - 0.15);
+            o.stop(peak + 5.6);
+        });
+        [0.1, 0.45, 0.9].forEach((d) => setTimeout(() => { if (on) sparkle(0.07, 4); }, (rise + d) * 1000));
+    }
+
     let lastTick = 0;
     function tick() {
         const t = now();
@@ -335,20 +535,49 @@ export function createAudio() {
 
     function zoom(p) {
         const t = now();
-        zoomGain.gain.setTargetAtTime(swell(p) * 0.22, t, 0.05);
-        zoomBand.frequency.setTargetAtTime(350 + p * 3200, t, 0.05);
-        zoomTone.frequency.setTargetAtTime(110 * Math.pow(2, p * 2), t, 0.05);
-        zoomToneGain.gain.setTargetAtTime(swell(p) * 0.04, t, 0.05);
+        const rise = Math.pow(2, p * 2);   // two octaves over the zoom
+        zoomGain.gain.setTargetAtTime(swell(p) * 0.42, t, 0.05);
+        zoomBand.frequency.setTargetAtTime(250 + p * 1600, t, 0.05);
+        zoomTone.frequency.setTargetAtTime(110 * rise, t, 0.05);
+        zoomTone2.frequency.setTargetAtTime(165 * rise, t, 0.05);
+        zoomToneGain.gain.setTargetAtTime(swell(p) * 0.105, t, 0.05);
+    }
+
+    // One star note: a soft, high sine from the current chord that
+    // fades slowly, placed somewhere left to right, mostly reverb.
+    function grain() {
+        const t = now() + Math.random() * 0.04;
+        const notes = pad ? pad.notes : CHORDS.overview;
+        const f = notes[(Math.random() * notes.length) | 0] * (Math.random() < 0.6 ? 4 : 8);
+        const o = ctx.createOscillator();
+        o.type = "sine";
+        o.frequency.value = f;
+        o.detune.value = (Math.random() - 0.5) * 12;
+        const g = ctx.createGain();
+        const level = 0.042 + Math.random() * 0.059;
+        const len = 0.6 + Math.random() * 0.9;
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(level, t + 0.03);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+        o.connect(g);
+        const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+        if (pan) { pan.pan.value = Math.random() * 1.8 - 0.9; g.connect(pan); pan.connect(verbIn); pan.connect(gainNode(0.3, sfx)); }
+        else { g.connect(verbIn); }
+        o.start(t);
+        o.stop(t + len + 0.05);
     }
 
     function burst(p) {
         const t = now();
-        burstGain.gain.setTargetAtTime(swell(p) * 0.4, t, 0.06);
-        // A few bright notes as the dust lets go (forward only).
-        [0.15, 0.4, 0.65].forEach((mark) => {
-            if (lastBurst < mark && p >= mark) sparkle(0.04, 8);
-        });
+        burstGain.gain.setTargetAtTime(swell(p) * 0.64, t, 0.08);
+        burstBand.frequency.setTargetAtTime(400 + p * 1400, t, 0.08);
+        // Star notes, as many as the dust moves (either direction),
+        // densest in the middle of the burst. About 45 over a burst.
+        grainAcc += Math.abs(p - lastBurst) * 70 * (0.3 + 0.7 * swell(p));
         lastBurst = p;
+        let n = 0;
+        while (grainAcc >= 1 && n < 4) { grainAcc -= 1; n++; grain(); }
+        grainAcc = Math.min(grainAcc, 2);
     }
 
     /* --- On / off --------------------------------------------- */
@@ -358,7 +587,6 @@ export function createAudio() {
         if (!ctx) init();
         ctx.resume();
         on = true;
-        wanted = true;
         savePref(true);
         const t = now();
         master.gain.cancelScheduledValues(t);
@@ -370,7 +598,6 @@ export function createAudio() {
 
     function disable() {
         on = false;
-        wanted = false;
         savePref(false);
         clearTimeout(sparkleTimer);
         if (ctx) {
@@ -381,17 +608,6 @@ export function createAudio() {
             setTimeout(() => { if (!on && ctx) ctx.suspend(); }, 700);
         }
         render();
-    }
-
-    // Saved as on: start at the first gesture the browser accepts.
-    const resumeOnGesture = () => {
-        window.removeEventListener("pointerdown", resumeOnGesture, true);
-        window.removeEventListener("keydown", resumeOnGesture, true);
-        if (wanted && !on) enable();
-    };
-    if (wanted) {
-        window.addEventListener("pointerdown", resumeOnGesture, true);
-        window.addEventListener("keydown", resumeOnGesture, true);
     }
 
     document.addEventListener("visibilitychange", () => {
@@ -422,10 +638,10 @@ export function createAudio() {
     }
 
     function render() {
-        wrap.classList.toggle("is-on", on || wanted);
+        wrap.classList.toggle("is-on", on);
         btn.setAttribute("aria-pressed", String(on));
         btn.setAttribute("aria-label", on ? "Turn sound off" : "Turn sound on");
-        btn.querySelector(".sound-state").textContent = on || wanted ? "On" : "Off";
+        btn.querySelector(".sound-state").textContent = on ? "On" : "Off";
     }
     render();
 
@@ -465,20 +681,35 @@ export function createAudio() {
         setPlanet(key) {
             if (key === planet) return;
             planet = key;
-            if (ctx) setChord(key);
+            if (ctx) {
+                setChord(key);
+                if (on && ctx.state === "running") depart();
+            }
         },
         // 0..1, every frame from the render loop.
         setWarp(w) {
             if (!on || !ctx || Math.abs(w - lastWarp) < 0.004) return;
             lastWarp = w;
+            // A flight that got going and is now slowing down: arrival.
+            if (w > 0.45) warpArmed = true;
+            else if (warpArmed && w < 0.12) { warpArmed = false; arrive(); }
             const t = now();
-            warpGain.gain.setTargetAtTime(w * w * 0.3, t, 0.08);
-            warpBand.frequency.setTargetAtTime(250 + w * 2600, t, 0.1);
-            rumbleGain.gain.setTargetAtTime(w * 0.16, t, 0.1);
+            const e = w * w * (3 - 2 * w);   // smooth start and end
+            whooshGain.gain.setTargetAtTime(e * 0.32, t, 0.12);
+            whooshFilters.forEach((f, i) => f.frequency.setTargetAtTime((140 + w * 780) * (i ? 1.19 : 1), t, 0.15));
+            droneGain.gain.setTargetAtTime(e * 0.24, t, 0.15);
+            droneFilter.frequency.setTargetAtTime(140 + w * 760, t, 0.15);
+            // Pitch rises with speed, like a doppler swoop (up to a fifth).
+            droneOscs.forEach((o) => o.detune.setTargetAtTime(o._cents + w * 700, t, 0.2));
+            shimmerGain.gain.setTargetAtTime(Math.max(0, e - 0.15) * 0.05, t, 0.3);
+        },
+        // The sun rising in the intro (only heard with sound on).
+        sunrise(rise) {
+            if (on && ctx) sunrise(rise);
         },
         // A short "Click for sound" bubble after the intro.
         showHint() {
-            if (on || wanted) return;
+            if (on) return;
             hint.classList.add("is-visible");
             setTimeout(() => hint.classList.remove("is-visible"), 6000);
         },

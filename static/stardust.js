@@ -6,10 +6,17 @@
 
    - Near the bottom of the screen, each piece of content
      (letters, rules, borders, images) gathers out of dust that
-     drifts in from just around it.
+     streams in from below along curved, swirling ribbons.
    - In the middle band the real page is shown, crisp and solid.
    - Near the top of the screen it breaks back into dust that
-     drifts up and fades away.
+     streams up and away.
+
+   The look: loose dust is fine, cool blue streaks of light
+   (each speck is drawn stretched along its own path, like a
+   long exposure). Specks glow hot gold/red in the moment they
+   land in place and the moment they break away. The paths
+   follow a curl-noise flow field, so nearby specks share a
+   path and together draw ribbons.
 
    How it works:
    - At load (and on resize / image load) the visible content of
@@ -17,8 +24,8 @@
      words are re-drawn on a scratch canvas with their own font
      and colour, borders become dotted lines, images are read
      pixel by pixel.
-   - The GPU places each point from its page position, the scroll
-     offset and a few seeds, so nothing per particle runs on the
+   - The GPU places each speck from its page position, the scroll
+     offset and a few seeds, so nothing per speck runs on the
      CPU. Each frame only updates a handful of uniforms.
    - The real content is masked to the same band with a CSS mask
      that is pinned to the viewport, so dust and DOM cross-fade.
@@ -56,11 +63,15 @@ export function createStardust({ roots, quality = "high" } = {}) {
     let IMG_BUDGET = FULL_IMG_BUDGET;
     const fullDpr = Math.min(window.devicePixelRatio || 1, 2);
     let dpr = fullDpr;
+    // Glow makes each loose speck a larger sprite (more pixels to fill),
+    // so phones get a softer version and "low" graphics none.
+    let glow = 1;
     const setLevel = (level) => {
         const low = level === "low";
         BUDGET = low ? FULL_BUDGET / 2 : FULL_BUDGET;
         IMG_BUDGET = low ? FULL_IMG_BUDGET / 2 : FULL_IMG_BUDGET;
         dpr = low ? 1 : fullDpr;
+        glow = low ? 0 : small ? 0.6 : 1;
     };
     setLevel(quality);
     let vw = window.innerWidth;
@@ -69,17 +80,37 @@ export function createStardust({ roots, quality = "high" } = {}) {
     renderer.setClearColor(0x000000, 0);
     renderer.setSize(vw, vh);
 
+    // Colours. Loose dust is cool blue (the telemetry blue, lifted);
+    // a speck glows hot (gold to red, the sun's colours) in the moment
+    // it lands in place and the moment it breaks away.
+    const rootCss = getComputedStyle(document.documentElement);
+    const rgbOf = (name, fallback) => {
+        const v = rootCss.getPropertyValue(name).trim();
+        return v.startsWith("#") ? hexToRgba(v) : fallback;
+    };
+    const gold = rgbOf("--horizon-gold", [1, 0.82, 0.56, 1]);
+    const red = rgbOf("--horizon-red", [0.84, 0.43, 0.31, 1]);
     const uniforms = {
         uView: { value: new THREE.Vector2(vw, vh) },
         uDpr: { value: dpr },
         uTime: { value: 0 },
         uScroll: { value: 0 },
-        uLines: { value: new THREE.Vector4() }
+        uVel: { value: 0 },
+        uGlow: { value: glow },
+        uLines: { value: new THREE.Vector4() },
+        uCool: { value: new THREE.Vector3(0.5, 0.66, 1.0) },
+        uGold: { value: new THREE.Vector3(gold[0], gold[1], gold[2]) },
+        uRed: { value: new THREE.Vector3(red[0], red[1], red[2]) }
     };
 
+    // Each speck is drawn as a small quad stretched along its own path,
+    // from where it was a moment ago (tail) to where it is now (head).
+    // Still specks are round dots; moving ones are streaks.
     const mat = new THREE.ShaderMaterial({
         uniforms,
         vertexShader: /* glsl */`
+            // position.xy = the quad corner (-1..1); the rest is per speck.
+            attribute vec2 aPos;     // page position of the speck (px)
             attribute vec4 aColor;
             attribute float aSize;
             attribute vec2 aSeed;
@@ -87,33 +118,88 @@ export function createStardust({ roots, quality = "high" } = {}) {
             uniform float uDpr;
             uniform float uTime;
             uniform float uScroll;
+            uniform float uVel;    // this layer's smoothed scroll speed (px per frame)
+            uniform float uGlow;   // 0 = plain, 1 = full glow
             uniform vec4 uLines;   // enter-from, enter-to, exit-from, exit-to (px)
-            varying vec4 vColor;
+            uniform vec3 uCool;
+            uniform vec3 uGold;
+            uniform vec3 uRed;
+            varying vec3 vColor;
             varying float vA;
+            varying vec2 vUv;      // quad corner, for the capsule shape
+            varying float vLen;    // streak length (px)
+            varying float vW;      // half width (px)
+            varying float vCore;   // solid part, as a share of the half width
+            varying float vHalo;
 
-            vec2 dir(float a) { return vec2(cos(a * 6.2831853), sin(a * 6.2831853)); }
+            // 2D simplex noise. Ian McEwan, Ashima Arts (MIT licence).
+            vec3 permute(vec3 x) { return mod(((x * 34.0) + 1.0) * x, 289.0); }
+            float snoise(vec2 v) {
+                const vec4 C = vec4(0.211324865405187, 0.366025403784439, -0.577350269189626, 0.024390243902439);
+                vec2 i = floor(v + dot(v, C.yy));
+                vec2 x0 = v - i + dot(i, C.xx);
+                vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+                vec4 x12 = x0.xyxy + C.xxzz;
+                x12.xy -= i1;
+                i = mod(i, 289.0);
+                vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0)) + i.x + vec3(0.0, i1.x, 1.0));
+                vec3 m = max(0.5 - vec3(dot(x0, x0), dot(x12.xy, x12.xy), dot(x12.zw, x12.zw)), 0.0);
+                m = m * m;
+                m = m * m;
+                vec3 x = 2.0 * fract(p * C.www) - 1.0;
+                vec3 h = abs(x) - 0.5;
+                vec3 a0 = x - floor(x + 0.5);
+                m *= 1.79284291400159 - 0.85373472095314 * (a0 * a0 + h * h);
+                vec3 g;
+                g.x = a0.x * x0.x + h.x * x0.y;
+                g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+                return 130.0 * dot(m, g);
+            }
+
+            // Curl of the noise: a swirling flow with no sources or sinks.
+            vec2 curl(vec2 q) {
+                const float e = 0.12;
+                float dy = snoise(q + vec2(0.0, e)) - snoise(q - vec2(0.0, e));
+                float dx = snoise(q + vec2(e, 0.0)) - snoise(q - vec2(e, 0.0));
+                return vec2(dy, -dx) / (2.0 * e);
+            }
+
+            // Follow the flow from a start point for a given distance, in a
+            // few steps. Nearby specks follow nearly the same curved path,
+            // each to its own distance, so together they draw ribbons.
+            // bias pulls the path one way (down on the way in, up on the
+            // way out). dir returns the direction at the end of the path.
+            const float FLOW_SCALE = 0.0024;
+            // The path may sweep sideways but never turns back across
+            // the page: dust coming in stays below its home, dust going
+            // out stays above it.
+            vec2 march(vec2 start, float dist, vec2 bias, vec2 drift, out vec2 dir) {
+                vec2 x = start;
+                vec2 d = normalize(bias);
+                float h = dist / 5.0;
+                for (int i = 0; i < 5; i++) {
+                    d = normalize(curl(x * FLOW_SCALE + drift) + bias);
+                    d.y = bias.y > 0.0 ? max(d.y, 0.12) : min(d.y, -0.12);
+                    d = normalize(d);
+                    x += d * h;
+                }
+                dir = d;
+                return x;
+            }
 
             void main() {
-                vec2 p = vec2(position.x, position.y - uScroll);
+                vec2 home = vec2(aPos.x, aPos.y - uScroll);
                 float j = aSeed.y;
 
-                // Progress through each zone, staggered per particle so
-                // the edge never reads as a straight line.
-                float pin = clamp((uLines.x - p.y) / (uLines.x - uLines.y), 0.0, 1.0);
-                pin = clamp(pin * 1.3 - j * 0.3, 0.0, 1.0);
-                float pout = clamp((uLines.z - p.y) / (uLines.z - uLines.w), 0.0, 1.0);
-                pout = clamp(pout * 1.12 - j * 0.12, 0.0, 1.0);
-
-                float ein = 1.0 - pow(1.0 - pin, 3.0);
-                float eout = pout * pout;
-                vec2 wob = vec2(sin(uTime * 1.3 + aSeed.x * 40.0), cos(uTime * 1.1 + j * 30.0));
-
-                // Arrives from a little way off, slightly from below;
-                // leaves wider, drifting upward.
-                vec2 sIn = dir(aSeed.x) * (16.0 + j * 64.0) + vec2(0.0, 24.0);
-                vec2 sOut = dir(fract(aSeed.x * 7.13 + 0.3)) * (30.0 + fract(j * 3.7) * 140.0) + vec2(0.0, -90.0);
-                p += (sIn + wob * 7.0) * (1.0 - ein);
-                p += (sOut + wob * 12.0) * eout;
+                // Progress through each zone. The stagger mixes broad
+                // patches (noise over the page) with fine grain, so the
+                // edge is ragged, like burning paper.
+                float patchN = snoise(aPos * 0.0042) * 0.5 + 0.5;
+                float s = mix(j, patchN, 0.55);
+                float pin = clamp((uLines.x - home.y) / (uLines.x - uLines.y), 0.0, 1.0);
+                pin = clamp(pin * 1.3 - s * 0.3, 0.0, 1.0);
+                float pout = clamp((uLines.z - home.y) / (uLines.z - uLines.w), 0.0, 1.0);
+                pout = clamp(pout * 1.12 - s * 0.12, 0.0, 1.0);
 
                 float aIn = smoothstep(0.0, 0.3, pin) * (1.0 - smoothstep(0.8, 1.0, pin));
                 float aOut = smoothstep(0.0, 0.12, pout) * (1.0 - smoothstep(0.4, 1.0, pout));
@@ -121,33 +207,142 @@ export function createStardust({ roots, quality = "high" } = {}) {
 
                 if (a < 0.004) {           // skip invisible dust entirely
                     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
-                    gl_PointSize = 0.0;
-                    vColor = vec4(0.0);
+                    vColor = vec3(0.0);
                     vA = 0.0;
+                    vUv = vec2(0.0);
+                    vLen = 0.0;
+                    vW = 1.0;
+                    vCore = 1.0;
+                    vHalo = 0.0;
                     return;
                 }
 
-                gl_Position = vec4(p.x / uView.x * 2.0 - 1.0, 1.0 - p.y / uView.y * 2.0, 0.0, 1.0);
-                gl_PointSize = aSize * uDpr * (1.0 + (1.0 - ein) * 0.6 + eout * 0.8);
-                float tw = 0.8 + 0.2 * sin(uTime * (2.0 + fract(aSeed.x * 9.1) * 3.0) + j * 50.0);
-                vColor = aColor;
-                vA = a * tw;
+                float lin = pow(1.0 - pin, 3.0);   // looseness on the way in
+                float lout = pout * pout;          // looseness on the way out
+                float loose = max(lin, lout);
+                bool leaving = lout > lin;
+
+                // Paths. Far specks (depth) travel less, like parallax.
+                float depth = 0.55 + fract(aSeed.x * 17.31) * 0.9;
+                vec2 drift = vec2(uTime * 0.02, -uTime * 0.03);   // the flow slowly changes
+                vec2 bias = leaving
+                    ? vec2((aSeed.x - 0.5) * 0.5, -0.8)
+                    : vec2((aSeed.x - 0.5) * 0.5, 0.6);
+                float reach = leaving
+                    ? (150.0 + fract(j * 5.3) * 170.0) * depth
+                    : (110.0 + j * 150.0) * depth;
+                float L = leaving ? lout : lin;
+                vec2 dir;
+                vec2 headPage = march(aPos, reach * L, bias, drift, dir);
+                vec2 wob = vec2(sin(uTime * 1.3 + aSeed.x * 40.0), cos(uTime * 1.1 + j * 30.0)) * (1.5 + 3.0 * loose);
+                vec2 lag = vec2(0.0, uVel * (0.4 + depth) * 1.3 * loose);   // inertia
+                vec2 head = headPage - vec2(0.0, uScroll) + wob + lag;
+
+                // Streak length follows the speck's speed along its path
+                // (how fast its looseness changes as you scroll), plus
+                // motion blur from the scroll itself. The tail points back
+                // to where it came from.
+                float speed = leaving ? 2.0 * pout : 3.0 * (1.0 - pin) * (1.0 - pin);
+                float len = reach * speed * 0.11 * (0.6 + 0.8 * fract(aSeed.x * 3.3));
+                // Break into points first, then stretch into streaks.
+                len *= smoothstep(0.02, 0.3, L);
+                vec2 tail = leaving ? head - dir * len : head + dir * len;
+                tail.y += uVel * 1.2 * sqrt(loose);
+                vec2 ax = head - tail;
+                len = length(ax);
+                if (len > 140.0) { tail = head - ax / len * 140.0; len = 140.0; }
+
+                // Colour: true colour in place, cool blue when loose, hot
+                // as it lands and as it breaks away.
+                vec3 col = mix(aColor.rgb, uCool, 0.9 * smoothstep(0.0, 0.3, loose));
+                float heatIn = smoothstep(0.45, 0.65, pin) * (1.0 - smoothstep(0.74, 0.92, pin));
+                float heatOut = smoothstep(0.0, 0.04, pout) * (1.0 - smoothstep(0.08, 0.3, pout));
+                float heat = max(heatIn, heatOut) * smoothstep(0.4, 0.8, fract(j * 7.31 + aSeed.x));
+                vec3 ember = mix(uGold, uRed, fract(aSeed.x * 23.7));
+                col = mix(col, ember, heat * 0.85);
+                float glint = max(heatIn, heatOut) * step(0.82, fract(j * 13.7));
+                col = mix(col, vec3(1.0), glint * 0.7);
+
+                // Twinkle only while loose.
+                float tw0 = 0.5 + 0.5 * sin(uTime * (1.6 + fract(aSeed.x * 9.1) * 3.4) + j * 50.0);
+                float tw = mix(1.0, 0.55 + 0.75 * tw0 * tw0 * tw0, loose);
+
+                // Size: in place, the sampled size; loose, a spread from
+                // fine points to a few larger motes. The quad is wider
+                // than the solid core to hold a soft glow.
+                float spread = 0.45 + 1.35 * pow(fract(aSeed.x * 71.3 + j * 0.37), 3.0);
+                // Big specks (large headings, images) keep their size when
+                // loose, varied a little, so they do not shrink from big to
+                // small as they move. Small specks (body text) stay as
+                // before: loose strands are fine, like hair-thin light.
+                float big = smoothstep(1.4, 2.2, aSize);
+                float vary = 0.85 + 0.3 * fract(aSeed.x * 71.3 + j * 0.37);
+                float looseScale = mix(spread * 0.6, vary, big);
+                float core = aSize * 0.5 * mix(1.0, looseScale, smoothstep(0.0, 0.5, loose));
+                // A fast speck smears into a thinner, longer streak
+                // (only a little for big specks).
+                core *= mix(1.0, mix(0.4, 0.8, big), smoothstep(2.0, 14.0, len / max(core, 0.3)));
+                core = max(core, 0.45);
+                float halo = 1.0 + 1.3 * loose * uGlow;
+                float w = core * halo;
+
+                // A long streak spreads the same light over more length.
+                float energy = clamp((5.0 * core) / (len + 5.0 * core), 0.45, 1.0);
+
+                vec2 along = len > 0.01 ? ax / len : vec2(1.0, 0.0);
+                vec2 nrm = vec2(-along.y, along.x);
+                vec2 q = mix(tail, head, position.x * 0.5 + 0.5) + along * position.x * w + nrm * position.y * w;
+
+                gl_Position = vec4(q.x / uView.x * 2.0 - 1.0, 1.0 - q.y / uView.y * 2.0, 0.0, 1.0);
+                vUv = position.xy;
+                vLen = len;
+                vW = w;
+                vCore = 1.0 / halo;
+                vHalo = loose * uGlow;
+                vColor = min(col * 1.1, 1.0);
+                vA = a * tw * energy * (1.0 + 0.3 * loose + heat * 0.9 + glint * 0.8);
             }
         `,
         fragmentShader: /* glsl */`
-            varying vec4 vColor;
+            varying vec3 vColor;
             varying float vA;
+            varying vec2 vUv;
+            varying float vLen;
+            varying float vW;
+            varying float vCore;
+            varying float vHalo;
             void main() {
-                float d = length(gl_PointCoord - 0.5) * 2.0;
+                // Distance to the streak's centre line, as a capsule.
+                float x = (vUv.x * 0.5 + 0.5) * (vLen + 2.0 * vW) - vW;   // 0 = tail, vLen = head
+                float dx = max(max(-x, x - vLen), 0.0);
+                float d = length(vec2(dx, vUv.y * vW)) / vW;
                 if (d > 1.0) discard;
-                float a = 1.0 - smoothstep(0.3, 1.0, d);
-                gl_FragColor = vec4(min(vColor.rgb * 1.15, 1.0), a * vA);
+                float r = d / vCore;
+                float core = 1.0 - smoothstep(0.35, 1.0, r);
+                float halo = exp(-d * d * 5.0) * 0.7 * vHalo;
+                // Brightest at the head, fading toward the tail.
+                float fade = vLen > 0.5 ? mix(0.12, 1.0, clamp(x / vLen, 0.0, 1.0)) : 1.0;
+                float a = clamp(core + halo, 0.0, 1.0) * vA * fade;
+                gl_FragColor = vec4(vColor * a, a);   // premultiplied
             }
         `,
         transparent: true,
         depthTest: false,
-        depthWrite: false
+        depthWrite: false,
+        side: THREE.DoubleSide,   // screen y runs down, which flips the winding
+        // Colour adds up (overlapping streaks glow brighter, like light);
+        // coverage blends normally.
+        blending: THREE.CustomBlending,
+        blendEquation: THREE.AddEquation,
+        blendSrc: THREE.OneFactor,
+        blendDst: THREE.OneFactor,
+        blendSrcAlpha: THREE.OneFactor,
+        blendDstAlpha: THREE.OneMinusSrcAlphaFactor
     });
+
+    // One quad, shared by every speck (two triangles).
+    const QUAD = new Float32Array([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0]);
+    const QUAD_INDEX = [0, 1, 2, 0, 2, 3];
 
     const scene = new THREE.Scene();
     const cam = new THREE.Camera();
@@ -160,22 +355,39 @@ export function createStardust({ roots, quality = "high" } = {}) {
     // a burst does; all others use the screen-edge zones.
     const globalLines = new THREE.Vector4();
     const makeLayer = (anchor = null) => {
-        const layer = new THREE.Points(new THREE.BufferGeometry(), mat);
+        const layer = new THREE.Mesh(new THREE.InstancedBufferGeometry(), mat);
         layer.frustumCulled = false;
+        layer.visible = false;   // until it has specks (upload)
+        const ud = layer.userData;
         if (anchor) {
             let sampledTop = 0;
-            layer.userData.rebase = () => { sampledTop = anchor.getBoundingClientRect().top + window.scrollY; };
-            layer.userData.rebase();
-            layer.userData.scroll = () => sampledTop - anchor.getBoundingClientRect().top;
+            ud.rebase = () => {
+                sampledTop = anchor.getBoundingClientRect().top + window.scrollY;
+                ud.prev = undefined;   // the offset jumps; not real movement
+            };
+            ud.rebase();
+            ud.scroll = () => sampledTop - anchor.getBoundingClientRect().top;
         }
+        ud.vel = 0;
         layer.onBeforeRender = () => {
-            uniforms.uScroll.value = layer.userData.scroll ? layer.userData.scroll() : window.scrollY;
-            uniforms.uLines.value.copy(layer.userData.lines ? layer.userData.lines() : globalLines);
+            const s = ud.scroll ? ud.scroll() : window.scrollY;
+            // Scroll speed in px per 60 Hz frame, so the trail looks the
+            // same at any refresh rate. Clamped and smoothed.
+            const t = performance.now();
+            let v = 0;
+            if (ud.prev !== undefined && t > ud.prevT) v = (s - ud.prev) * (16.67 / Math.max(4, t - ud.prevT));
+            ud.prev = s;
+            ud.prevT = t;
+            ud.vel += (Math.max(-36, Math.min(36, v)) - ud.vel) * 0.16;
+            uniforms.uScroll.value = s;
+            uniforms.uVel.value = ud.vel;
+            uniforms.uLines.value.copy(ud.lines ? ud.lines() : globalLines);
             mat.uniformsNeedUpdate = true;
         };
         scene.add(layer);
         return layer;
     };
+    const countSpecks = () => scene.children.reduce((n, l) => n + (l.geometry.instanceCount || 0), 0);
     const dropLayer = (layer) => { scene.remove(layer); layer.geometry.dispose(); };
     const textLayer = makeLayer();
     const imageLayers = new Map();   // <img> -> its own dust layer
@@ -362,7 +574,7 @@ export function createStardust({ roots, quality = "high" } = {}) {
             pinnedLayers.push(layer);
         });
         sampledHeight = document.documentElement.scrollHeight;
-        api.count = [...scene.children].reduce((n, l) => n + l.geometry.drawRange.count, 0);
+        api.count = countSpecks();
     }
 
     function sampleImage(img, root) {
@@ -409,7 +621,7 @@ export function createStardust({ roots, quality = "high" } = {}) {
         const layer = makeLayer(img.closest("[data-dust-sticky]"));
         imageLayers.set(img, layer);
         upload(layer, out, IMG_BUDGET * 1.5);
-        api.count = [...scene.children].reduce((n, l) => n + l.geometry.drawRange.count, 0);
+        api.count = countSpecks();
     }
 
     function upload(layer, out, budget) {
@@ -419,15 +631,15 @@ export function createStardust({ roots, quality = "high" } = {}) {
         if (n > budget) keep = budget / n;
         const grow = keep < 1 ? Math.sqrt(1 / keep) : 1;
         const count = Math.min(n, Math.floor(budget));
-        const pos = new Float32Array(count * 3);
+        const pos = new Float32Array(count * 2);
         const col = new Float32Array(count * 4);
         const size = new Float32Array(count);
         const seed = new Float32Array(count * 2);
         let k = 0;
         for (let i = 0; i < n && k < count; i++) {
             if (keep < 1 && Math.random() > keep) continue;
-            pos[k * 3] = out.x[i];
-            pos[k * 3 + 1] = out.y[i];
+            pos[k * 2] = out.x[i];
+            pos[k * 2 + 1] = out.y[i];
             col[k * 4] = out.c[i * 4];
             col[k * 4 + 1] = out.c[i * 4 + 1];
             col[k * 4 + 2] = out.c[i * 4 + 2];
@@ -437,11 +649,16 @@ export function createStardust({ roots, quality = "high" } = {}) {
             seed[k * 2 + 1] = Math.random();
             k++;
         }
-        geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-        geo.setAttribute("aColor", new THREE.BufferAttribute(col, 4));
-        geo.setAttribute("aSize", new THREE.BufferAttribute(size, 1));
-        geo.setAttribute("aSeed", new THREE.BufferAttribute(seed, 2));
-        geo.setDrawRange(0, k);
+        if (!geo.index) {
+            geo.setIndex(QUAD_INDEX);
+            geo.setAttribute("position", new THREE.BufferAttribute(QUAD, 3));
+        }
+        geo.setAttribute("aPos", new THREE.InstancedBufferAttribute(pos, 2));
+        geo.setAttribute("aColor", new THREE.InstancedBufferAttribute(col, 4));
+        geo.setAttribute("aSize", new THREE.InstancedBufferAttribute(size, 1));
+        geo.setAttribute("aSeed", new THREE.InstancedBufferAttribute(seed, 2));
+        geo.instanceCount = k;
+        layer.visible = k > 0;
     }
 
     let sampleTimer = 0;
@@ -604,7 +821,7 @@ export function createStardust({ roots, quality = "high" } = {}) {
             });
             const h = Math.max(1, bottom - top);
             rel = { top, h, range: Math.max(160, h * 0.4) };
-            api.count = [...scene.children].reduce((n, l) => n + l.geometry.drawRange.count, 0);
+            api.count = countSpecks();
         }
 
         function maskElements() {
@@ -648,6 +865,7 @@ export function createStardust({ roots, quality = "high" } = {}) {
             renderer.setPixelRatio(dpr);
             renderer.setSize(vw, vh);
             uniforms.uDpr.value = dpr;
+            uniforms.uGlow.value = glow;
             sampleAll();
         },
         begin(duration = 2.2) {

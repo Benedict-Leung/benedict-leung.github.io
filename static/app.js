@@ -394,8 +394,8 @@ function showEnter() {
         btn.addEventListener("click", () => {
             if (entered) return;
             entered = true;
-            // audio.js may already have switched sound on at this
-            // press (a saved "on"), so "without sound" turns it off.
+            // Only these two buttons turn sound on or off at the gate;
+            // clicks anywhere else on the loading screen stay silent.
             if (btn.dataset.sound === "on") { if (!sound.on) sound.enable(); }
             else if (sound.on) sound.disable();
             startIntro();
@@ -463,6 +463,8 @@ function startIntro() {
       .to(scene, { backgroundIntensity: 1.0, duration: 3.0, ease: "power1.inOut" }, 0.2)
 
     // PHASE 2 — the camera sinks, the sun rises into frame and ignites as it does.
+    // Its sound swells from here and opens as the sun settles (about 4.0s).
+      .call(() => { if (!REDUCED_MOTION) sound.sunrise(2.1); }, null, 1.9)
       .to(sunUniforms.uIgnite, { value: 0.7, duration: 1.0, ease: "power2.in" }, 1.6)
       .to(camera.position, {
           y: 0,
