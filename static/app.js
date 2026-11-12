@@ -319,11 +319,35 @@ composer.setSize(window.innerWidth, window.innerHeight + EXTRA_HEIGHT);
 const renderPass = new RenderPass(scene, camera);
 const bloomPass = new UnrealBloomPass(
     new THREE.Vector2(window.innerWidth, window.innerHeight + EXTRA_HEIGHT),
-    0.3,   // strength
-    0.45,  // radius
-    1.1    // threshold (linear luminance)
+    0.42,  // strength
+    0.7,   // radius
+    1.0    // threshold (linear luminance)
 );
 const outputPass = new OutputPass();
+// Final grade, added inside the output pass so it costs no extra pass:
+// - a soft vignette (corners a little darker, so the eye stays in the middle)
+// - during a flight, colours split slightly toward the edges, like a fast lens.
+const gradeUniforms = outputPass.uniforms;
+gradeUniforms.uVignette = { value: 0.34 };
+gradeUniforms.uWarp = { value: 0 };
+outputPass.material.fragmentShader = outputPass.material.fragmentShader
+    .replace('uniform sampler2D tDiffuse;', /* glsl */`uniform sampler2D tDiffuse;
+        uniform float uVignette;
+        uniform float uWarp;`)
+    .replace('gl_FragColor = texture2D( tDiffuse, vUv );', /* glsl */`
+        vec2 gc = vUv - 0.5;
+        float gr2 = dot(gc, gc);          // 0 in the centre, 0.5 in the corners
+        vec3 gcol;
+        if (uWarp > 0.003) {
+            vec2 off = gc * gr2 * uWarp * 0.03;
+            gcol.r = texture2D(tDiffuse, vUv - off).r;
+            gcol.g = texture2D(tDiffuse, vUv).g;
+            gcol.b = texture2D(tDiffuse, vUv + off).b;
+        } else {
+            gcol = texture2D(tDiffuse, vUv).rgb;
+        }
+        gcol *= 1.0 - uVignette * smoothstep(0.10, 0.60, gr2);
+        gl_FragColor = vec4(gcol, 1.0);`);
 composer.addPass(renderPass);
 composer.addPass(bloomPass);
 bloomPass.enabled = !lowQuality;
@@ -349,7 +373,8 @@ camera.lookAt(introLookAt);
 // Uniform blocks that the intro timeline animates.
 const starUniforms = {
     time: { value: 0 },
-    introProgress: { value: 0.0 }
+    introProgress: { value: 0.0 },
+    uPx: { value: pixelRatioFor() }   // keeps stars the same size on screen at any resolution
 };
 const sunUniforms = {
     uTime: { value: 0 },
@@ -577,21 +602,24 @@ function buildSky() {
                 vec3 warm = vec3(1.00, 0.76, 0.50);
                 vec3 col = mix(cool, warm, clamp(core * 0.8, 0.0, 1.0));
 
-                float dens = band * (0.35 + 1.1 * n * n) * (1.0 - 0.85 * lanes) + wide * 0.1 * n;
-                col *= dens * (0.035 + 0.05 * core);
+                // Fine structure, so the band looks like clouds of stars and not a smooth fog.
+                float fine = fbm(d * 14.0 + 3.0, 4);
+                float dens = band * (0.30 + 1.25 * n * n) * (0.65 + 0.7 * fine) * (1.0 - 0.9 * lanes) + wide * 0.08 * n;
+                col *= dens * (0.060 + 0.11 * core);
 
-                // Very faint coloured gas so the black is never flat.
-                float neb1 = smoothstep(0.55, 0.85, fbm(d * 1.4 + 4.0, 5));
-                float neb2 = smoothstep(0.58, 0.88, fbm(d * 1.9 - 7.0, 5));
-                col += vec3(0.22, 0.10, 0.20) * neb1 * 0.035;
-                col += vec3(0.08, 0.16, 0.26) * neb2 * 0.03;
+                // Faint coloured gas so the black is never flat: a warm cloud
+                // near the band (the page's red and gold) and a cool one away from it.
+                float neb1 = smoothstep(0.52, 0.86, fbm(d * 1.4 + 4.0, 5));
+                float neb2 = smoothstep(0.56, 0.88, fbm(d * 1.9 - 7.0, 5));
+                col += vec3(0.30, 0.11, 0.09) * neb1 * (0.018 + 0.05 * wide);
+                col += vec3(0.07, 0.15, 0.28) * neb2 * 0.036;
 
 
                 // Sparse star dust, a little denser along the band.
                 vec3 cell = floor(d * 900.0);
                 float h = hash13(cell);
                 float dust = step(0.999, h) * fract(h * 113.0);
-                col += vec3(0.85, 0.9, 1.0) * dust * (0.012 + band * (0.02 + 0.06 * n));
+                col += vec3(0.85, 0.9, 1.0) * dust * (0.014 + band * (0.03 + 0.09 * n));
 
                 gl_FragColor = vec4(col, 1.0);
             }
@@ -647,13 +675,18 @@ function createSun() {
                 // Linear-space versions of the page's horizon colours.
                 // Matched to how .planet-horizon actually appears on screen (a soft,
                 // desaturated warm glow), pre-compensated for ACES tone mapping.
-                vec3 a = vec3(0.061, 0.018, 0.013);   // #3A1410  ember
-                vec3 b = vec3(0.546, 0.113, 0.068);   // #D66D50  --horizon-red
-                vec3 c = vec3(0.862, 0.226, 0.102);   // #dc8149  red/gold blend
-                vec3 d = vec3(2.132, 0.508, 0.107);   // #dba048  --horizon-gold
-                if (h < 0.40) return mix(a, b, h / 0.40);
-                if (h < 0.75) return mix(b, c, (h - 0.40) / 0.35);
-                return mix(c, d, (h - 0.75) / 0.25);
+                // The same hues as before (ember, --horizon-red, --horizon-gold),
+                // but the hot end now goes far above 1.0 (HDR). A star must be
+                // brighter than "white" to look like a light and not a painted ball.
+                vec3 a = vec3(0.16, 0.030, 0.014);    // ember, in the cool lanes
+                vec3 b = vec3(1.05, 0.20, 0.075);     // --horizon-red
+                vec3 c = vec3(2.10, 0.56, 0.13);      // red/gold blend
+                vec3 d = vec3(3.30, 1.25, 0.32);      // --horizon-gold, hot
+                vec3 e = vec3(5.00, 2.70, 1.05);      // pale gold, the hottest cells
+                if (h < 0.35) return mix(a, b, h / 0.35);
+                if (h < 0.60) return mix(b, c, (h - 0.35) / 0.25);
+                if (h < 0.85) return mix(c, d, (h - 0.60) / 0.25);
+                return mix(d, e, (h - 0.85) / 0.15);
             }
 
             void main() {
@@ -669,16 +702,20 @@ function createSun() {
                 // Sparse sunspots.
                 float spots = smoothstep(0.62, 0.8, snoise(vObj * 1.7 + vec3(7.0, t * 0.4, 3.0)));
 
-                float heat = 0.68 + 0.8 * (n1 - 0.5) + 0.08 * g;
-                heat -= spots * 0.12;
+                // Bright threads between the cells (faculae).
+                float veins = 1.0 - abs(snoise(vObj * 5.5 + n1 * 2.0 + vec3(t * 1.5, 0.0, -t)));
+                veins = pow(veins, 6.0);
+
+                float heat = 0.60 + 0.95 * (n1 - 0.5) + 0.07 * g + 0.16 * veins;
+                heat -= spots * 0.22;
 
                 vec3 col = ramp(heat);
-                // Limb darkening: the edge is deeper and redder than the centre.
-                float limb = pow(mu, 0.55);
-                col *= mix(0.35, 1.0, limb);
-                col = mix(vec3(0.072, 0.043, 0.032), col, smoothstep(0.0, 0.35, mu));   // #463026 edge
-                // Chromosphere rim.
-                col += vec3(0.218, 0.120, 0.078) * pow(1.0 - mu, 4.0) * 0.4;
+                // Limb darkening: the edge is deeper and redder than the centre,
+                // but it still gives light (no dark outline around the disc).
+                float limb = pow(mu, 0.6);
+                col *= mix(vec3(0.30, 0.16, 0.10), vec3(1.0), limb);
+                // Chromosphere: a thin bright ring that joins the disc to the corona.
+                col += vec3(2.6, 0.75, 0.22) * pow(1.0 - mu, 3.0) * 0.55;
 
                 col *= uIgnite;
                 gl_FragColor = vec4(col, 1.0);
@@ -689,7 +726,7 @@ function createSun() {
     sun = new THREE.Mesh(new THREE.SphereGeometry(SUN_R, SPHERE_SEG_W, SPHERE_SEG_H), surfaceMat);
 
     // Corona: one camera-facing quad, billboarded in the vertex shader.
-    const CORONA_SCALE = 1.6; // in sun radii — a thin halo, like the planet atmospheres
+    const CORONA_SCALE = 3.0; // in sun radii — a bright ring at the edge, then a short, soft halo
     const coronaMat = new THREE.ShaderMaterial({
         uniforms: {
             uTime: sunUniforms.uTime,
@@ -716,18 +753,25 @@ function createSun() {
                 float r = length(vP) * uRatio;   // in sun radii
                 float e = max(r - 1.0, 0.0);
 
-                float glow = exp(-e * 16.0) * 0.45 + exp(-e * 6.0) * 0.12;
+                // Three layers: a tight bright ring at the edge of the disc, the
+                // inner corona, and a short halo that fades out about one radius from the disc.
+                float ring = exp(-e * 20.0) * 1.15;
+                float inner = exp(-e * 10.0) * 0.36;
+                float halo = 0.045 / (1.0 + e * e * 12.0);
 
                 // Streamers: noise sampled on a circle so there is no seam at atan's wrap.
+                // Broad ones and fine ones; both move slowly outward.
                 float ang = atan(vP.y, vP.x + 1e-6);
                 vec2 cs = vec2(cos(ang), sin(ang));
-                float s = snoise(vec3(cs * 3.5, uTime * 0.05 - e * 0.7));
-                float rays = 1.0 + s * smoothstep(0.02, 0.2, e) * 0.35;
-                glow *= max(rays, 0.0);
+                float s1 = snoise(vec3(cs * 2.6, uTime * 0.04 - e * 0.5));
+                float s2 = snoise(vec3(cs * 8.0, uTime * 0.07 - e * 1.6 + 5.0));
+                float rays = 1.0 + (s1 * 0.5 + s2 * 0.22) * smoothstep(0.02, 0.30, e);
+                float glow = ring + (inner + halo) * max(rays, 0.0);
 
-                glow *= 1.0 - smoothstep(uRatio * 0.8, uRatio, r);
+                glow *= 1.0 - smoothstep(uRatio * 0.45, uRatio, r);
 
-                vec3 col = mix(vec3(0.218, 0.120, 0.078), vec3(0.104, 0.061, 0.043), smoothstep(0.0, 0.4, e));
+                // Gold next to the disc, cooling to the page's red farther out.
+                vec3 col = mix(vec3(2.3, 0.95, 0.30), vec3(1.0, 0.24, 0.10), smoothstep(0.0, 0.6, e));
                 gl_FragColor = vec4(col * glow * uIgnite, 1.0);
             }
         `,
@@ -740,12 +784,13 @@ function createSun() {
     corona.renderOrder = 3;
     sun.add(corona);
 
-    const sunLight = new THREE.PointLight(0xffe2c0, 3.0, 0, 0);
+    const sunLight = new THREE.PointLight(0xffe6cc, 3.3, 0, 0);
     sun.add(sunLight);
     scene.add(sun);
 
-    // Cool, very low fill so night sides read as shape, not holes.
-    scene.add(new THREE.AmbientLight(0x6a7a96, 1.1));
+    // Cool, very low fill so night sides read as shape, not holes. Kept low:
+    // a deep night side is what makes the lit side look bright.
+    scene.add(new THREE.AmbientLight(0x5a6f9a, 0.3));
 }
 
 /* ============================================================
@@ -798,9 +843,10 @@ function makeAtmosphere(center, R, shellR, color, intensity) {
                 vec3 n = (closest - uCenter) / max(b, 1e-4);
                 vec3 L = normalize(-uCenter);     // sun sits at the origin
                 float d = dot(n, L);
-                float lit = smoothstep(-0.30, 0.45, d);
-                float term = smoothstep(-0.30, 0.05, d) * (1.0 - smoothstep(0.05, 0.45, d));
-                vec3 col = mix(uColor, vec3(1.0, 0.52, 0.28), term * 0.55);
+                float lit = smoothstep(-0.22, 0.50, d);
+                // A thin warm band at the day/night line (sunset light), kept subtle.
+                float term = smoothstep(-0.22, 0.02, d) * (1.0 - smoothstep(0.02, 0.30, d));
+                vec3 col = mix(uColor, vec3(1.0, 0.56, 0.30), term * 0.38);
 
                 gl_FragColor = vec4(col * glow * lit * uIntensity, 1.0);
             }
@@ -828,10 +874,11 @@ function makeRingGeometry(inner, outer) {
 
 // Rings lit by the sun, with the planet's shadow falling across them and a
 // forward-scatter glow when you look through them toward the light.
-function makeRingMaterial(tex, center, R, brightness, opacity) {
+function makeRingMaterial(tex, center, R, brightness, opacity, tint = 0xffffff) {
     return new THREE.ShaderMaterial({
         uniforms: {
             map: { value: tex },
+            uTint: { value: new THREE.Color(tint) },
             uCenter: { value: center.clone() },
             uR: { value: R },
             uBright: { value: brightness },
@@ -853,6 +900,7 @@ function makeRingMaterial(tex, center, R, brightness, opacity) {
             uniform float uR;
             uniform float uBright;
             uniform float uOpacity;
+            uniform vec3 uTint;
             varying vec2 vUv;
             varying vec3 vWorld;
             void main() {
@@ -870,7 +918,7 @@ function makeRingMaterial(tex, center, R, brightness, opacity) {
                 vec3 V = normalize(cameraPosition - vWorld);
                 float scatter = pow(max(dot(-V, L), 0.0), 6.0) * 0.8;
 
-                vec3 col = tex.rgb * uBright * (0.10 + (0.95 + scatter) * shadow);
+                vec3 col = tex.rgb * uTint * uBright * (0.06 + (0.95 + scatter) * shadow);
                 gl_FragColor = vec4(col, a * uOpacity);
             }
         `,
@@ -891,6 +939,47 @@ function makeRingTexture(path) {
     return tex;
 }
 
+// The rings cast a shadow on their planet. For each point of the surface we
+// follow the line to the sun (at the origin); where that line crosses the
+// ring plane, the ring texture says how much light is stopped. Only the
+// direct sunlight is cut, so the shadowed band keeps the faint fill light.
+function addRingShadow(material, { center, normal, inner, outer, tex, strength = 0.8 }) {
+    material.onBeforeCompile = (shader) => {
+        shader.uniforms.uRingMap = { value: tex };
+        shader.uniforms.uRingCenter = { value: center.clone() };
+        shader.uniforms.uRingNormal = { value: normal.clone().normalize() };
+        shader.uniforms.uRingRange = { value: new THREE.Vector3(inner, outer, strength) };
+        shader.vertexShader = shader.vertexShader
+            .replace('#include <common>', '#include <common>\nvarying vec3 vRingWorld;')
+            .replace('#include <project_vertex>', '#include <project_vertex>\nvRingWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+        shader.fragmentShader = shader.fragmentShader
+            .replace('#include <common>', /* glsl */`#include <common>
+                varying vec3 vRingWorld;
+                uniform sampler2D uRingMap;
+                uniform vec3 uRingCenter;
+                uniform vec3 uRingNormal;
+                uniform vec3 uRingRange;   // inner radius, outer radius, strength`)
+            .replace('#include <lights_fragment_end>', /* glsl */`#include <lights_fragment_end>
+                {
+                    vec3 toSun = normalize(-vRingWorld);
+                    float denom = dot(toSun, uRingNormal);
+                    float tHit = dot(uRingCenter - vRingWorld, uRingNormal) / (abs(denom) > 1e-4 ? denom : 1e-4);
+                    if (tHit > 0.0) {
+                        float rr = length(vRingWorld + toSun * tHit - uRingCenter);
+                        float u = (rr - uRingRange.x) / (uRingRange.y - uRingRange.x);
+                        if (u > 0.0 && u < 1.0) {
+                            vec4 ringTex = texture2D(uRingMap, vec2(u, 0.5));
+                            float lum = dot(ringTex.rgb, vec3(0.299, 0.587, 0.114));
+                            float a = ringTex.a < 0.99 ? ringTex.a : smoothstep(0.0, 0.25, lum);
+                            float light = 1.0 - a * uRingRange.z;
+                            reflectedLight.directDiffuse *= light;
+                            reflectedLight.directSpecular *= light;
+                        }
+                    }
+                }`);
+    };
+}
+
 /* ============================================================
    PLANETS
    ============================================================ */
@@ -901,16 +990,25 @@ const createEarth = () => {
     tilt.rotation.z = THREE.MathUtils.degToRad(23.4);
     grp.add(tilt);
 
-    const mesh = new THREE.Mesh(
-        new THREE.SphereGeometry(10, SPHERE_SEG_W, SPHERE_SEG_H),
-        new THREE.MeshStandardMaterial({
-            map: loadTex(IMAGE_BASE + "Earth/2_no_clouds_4k.jpg"),
-            bumpMap: loadTex(IMAGE_BASE + "Earth/elev_bump_4k.jpg", false),
-            bumpScale: 0.5,
-            roughness: 0.75,
-            metalness: 0.05
-        })
-    );
+    const earthMat = new THREE.MeshStandardMaterial({
+        map: loadTex(IMAGE_BASE + "Earth/2_no_clouds_4k.jpg"),
+        bumpMap: loadTex(IMAGE_BASE + "Earth/elev_bump_4k.jpg", false),
+        bumpScale: 0.5,
+        roughness: 0.88,
+        metalness: 0.0
+    });
+    // Oceans are smooth and land is rough, so the sea shows a soft glint of
+    // the sun and the land does not. The mask is white where there is water.
+    const waterMask = loadTex(IMAGE_BASE + "Earth/water_4k.png", false);
+    earthMat.onBeforeCompile = (shader) => {
+        shader.uniforms.uWater = { value: waterMask };
+        shader.fragmentShader = shader.fragmentShader
+            .replace('#include <roughnessmap_pars_fragment>', '#include <roughnessmap_pars_fragment>\nuniform sampler2D uWater;')
+            .replace('#include <roughnessmap_fragment>', /* glsl */`
+                float water = texture2D(uWater, vMapUv).r;
+                float roughnessFactor = mix(roughness, 0.50, water);`);
+    };
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(10, SPHERE_SEG_W, SPHERE_SEG_H), earthMat);
     tilt.add(mesh);
 
     const clouds = new THREE.Mesh(
@@ -926,7 +1024,7 @@ const createEarth = () => {
     );
     tilt.add(clouds);
 
-    grp.add(makeAtmosphere(grp.position, 10, 11.6, 0x5c9bff, 1.35));
+    grp.add(makeAtmosphere(grp.position, 10, 11.3, 0x5c9bff, 1.6));
 
     scene.add(grp);
     planets.earth = { group: grp, mesh, clouds, r: 10 };
@@ -981,7 +1079,7 @@ const createJupiter = () => {
         new THREE.MeshStandardMaterial({
             map: loadTex(IMAGE_BASE + "Jupiter/jupiterclouds.png"),
             transparent: true,
-            opacity: 0.55,
+            opacity: 0.32,   // lower, so the cloud layer does not wash out the colour of the bands
             blending: THREE.AdditiveBlending,
             depthWrite: false,
             roughness: 1.0,
@@ -992,7 +1090,8 @@ const createJupiter = () => {
 
     const ring = new THREE.Mesh(
         makeRingGeometry(R * 1.3, R * 3.2),
-        makeRingMaterial(makeRingTexture(IMAGE_BASE + "Jupiter/JupiterRings.png"), grp.position, R, 1.35, 1.0)
+        // Jupiter's rings are thin dust: kept faint, so they do not compete with Saturn's.
+        makeRingMaterial(makeRingTexture(IMAGE_BASE + "Jupiter/JupiterRings.png"), grp.position, R, 1.1, 0.34, 0xffe9d2)
     );
     ring.rotation.x = -Math.PI / 2;
     ring.renderOrder = 1;
@@ -1024,9 +1123,10 @@ const createSaturn = () => {
     );
     tilt.add(mesh);
 
+    const ringTex = makeRingTexture(IMAGE_BASE + "Saturn/t00fri_gh_saturnrings.png");
     const ring = new THREE.Mesh(
         makeRingGeometry(22, 42),
-        makeRingMaterial(makeRingTexture(IMAGE_BASE + "Saturn/t00fri_gh_saturnrings.png"), grp.position, R, 1.15, 0.92)
+        makeRingMaterial(ringTex, grp.position, R, 1.2, 0.94, 0xfff0d8)   // a warm ice colour, not grey
     );
     ring.rotation.x = -Math.PI / 2;
     ring.renderOrder = 1;
@@ -1035,6 +1135,13 @@ const createSaturn = () => {
     grp.add(makeAtmosphere(grp.position, R, R * 1.06, 0xffe2a8, 0.45));
 
     scene.add(grp);
+    // The rings lie in the tilt group's XZ plane; its Y axis is their normal.
+    tilt.updateWorldMatrix(true, false);
+    addRingShadow(mesh.material, {
+        center: grp.position,
+        normal: new THREE.Vector3(0, 1, 0).transformDirection(tilt.matrixWorld),
+        inner: 22, outer: 42, tex: ringTex, strength: 0.82
+    });
     planets.saturn = { group: grp, mesh, r: R };
 };
 
@@ -1063,22 +1170,32 @@ function createStars() {
         return palette[1][0];
     };
 
+    // The shell is centred on the middle of the system (see starField.position)
+    // and starts far outside it, so no star is ever between the camera and a
+    // planet. (Before, the shell began at 600, where Jupiter is.)
     for (let i = 0; i < starCount; i++) {
-        const r = 600 + Math.random() * 1400;
+        const r = 1500 + Math.random() * 1700;
         const theta = 2 * Math.PI * Math.random();
         const phi = Math.acos(2 * Math.random() - 1);
         starPos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
         starPos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
         starPos[i * 3 + 2] = r * Math.cos(phi);
 
-        const hero = Math.random() < 0.025;
+        // Three kinds: many faint stars, a few bright ones, and a very few
+        // "flare" stars that are drawn with a thin four-point cross.
+        const roll = Math.random();
+        const flare = roll < 0.003;
+        const hero = roll < 0.03;
         const color = pick();
-        const brightness = hero ? 1.6 + Math.random() * 0.8 : 0.3 + Math.pow(Math.random(), 2) * 0.7;
+        const brightness = flare ? 1.8 + Math.random() * 0.9
+            : hero ? 1.6 + Math.random() * 0.8 : 0.3 + Math.pow(Math.random(), 2) * 0.7;
         starColors[i * 3] = color.r * brightness;
         starColors[i * 3 + 1] = color.g * brightness;
         starColors[i * 3 + 2] = color.b * brightness;
 
-        starSizes[i] = hero ? 16 + Math.random() * 10 : 5 + Math.random() * 9;
+        // Size on screen is size * 300 / distance, so sizes scale with the radius.
+        const px = flare ? 13 + Math.random() * 9 : hero ? 3.2 + Math.random() * 2.4 : 1.2 + Math.random() * 2.0;
+        starSizes[i] = px * r / 300;
         starPhases[i] = Math.random() * Math.PI * 2;
     }
 
@@ -1094,13 +1211,16 @@ function createStars() {
         vertexShader: /* glsl */`
             attribute float size;
             attribute float phase;
+            uniform float uPx;
             varying vec3 vColor;
             varying float vPhase;
+            varying float vPx;
             void main() {
                 vColor = color;
                 vPhase = phase;
                 vec4 mv = modelViewMatrix * vec4(position, 1.0);
-                gl_PointSize = max(size * (300.0 / -mv.z), 1.5);
+                vPx = size * (300.0 / -mv.z);            // size in CSS pixels
+                gl_PointSize = max(vPx * uPx, 1.5);
                 gl_Position = projectionMatrix * mv;
             }
         `,
@@ -1109,13 +1229,24 @@ function createStars() {
             uniform float introProgress;
             varying vec3 vColor;
             varying float vPhase;
+            varying float vPx;
             void main() {
-                float d = length(gl_PointCoord - 0.5) * 2.0;
+                vec2 pc = gl_PointCoord - 0.5;
+                float d = length(pc) * 2.0;
                 if (d > 1.0) discard;
                 // Sharp core with a faint halo — reads as a point of light, not a disc.
                 float core = exp(-d * d * 16.0);
                 float halo = exp(-d * d * 4.0) * 0.22;
-                float a = (core + halo) * (1.0 - smoothstep(0.75, 1.0, d));
+                float a = core + halo;
+                // Flare stars (the few large sprites): a very small core, a soft
+                // glow and a thin cross, like a bright star seen through a telescope.
+                float flare = smoothstep(9.0, 13.0, vPx);
+                if (flare > 0.0) {
+                    float cross = (exp(-abs(pc.x) * vPx * 2.2) + exp(-abs(pc.y) * vPx * 2.2)) * exp(-d * 3.2) * 0.55;
+                    float fa = exp(-d * d * 110.0) + exp(-d * d * 9.0) * 0.10 + cross;
+                    a = mix(a, fa, flare);
+                }
+                a *= 1.0 - smoothstep(0.75, 1.0, d);
 
                 float speed = 0.6 + fract(vPhase * 7.13) * 1.8;
                 float twinkle = 0.72 + 0.28 * sin(time * speed + vPhase * 5.0);
@@ -1132,6 +1263,7 @@ function createStars() {
     });
 
     starField = new THREE.Points(geo, mat);
+    starField.position.set(400, 0, 0);   // middle of the system (the planets are at x = 0..800)
     scene.add(starField);
 }
 
@@ -1322,7 +1454,10 @@ function createWarpField() {
             uniform float uLen;
             uniform float uBox;
             varying float vAlpha;
+            varying vec3 vTint;
             void main() {
+                // Star colours: most streaks are cool white, some are warm.
+                vTint = mix(vec3(0.72, 0.84, 1.0), vec3(1.0, 0.86, 0.68), smoothstep(0.55, 0.95, aSeed));
                 // Wrap each streak into a box around the camera so the field never runs out.
                 vec3 rel = mod(position - uCam, uBox) - uBox * 0.5;
                 vec3 p = uCam + rel - uDir * uLen * (0.4 + aSeed * 0.8) * aEnd;
@@ -1337,8 +1472,9 @@ function createWarpField() {
         fragmentShader: /* glsl */`
             uniform float uOpacity;
             varying float vAlpha;
+            varying vec3 vTint;
             void main() {
-                gl_FragColor = vec4(vec3(1.0) * vAlpha * uOpacity, 1.0);
+                gl_FragColor = vec4(vTint * vAlpha * uOpacity * 1.25, 1.0);
             }
         `,
         transparent: true,
@@ -1490,6 +1626,7 @@ function animate() {
                 warpUniforms.uOpacity.value = warp * 0.45;
             }
         }
+        gradeUniforms.uWarp.value = warp;
     }
 
     composer.render(dt);
@@ -1511,6 +1648,7 @@ function applyQuality(level) {
     setWarpDensity();
     renderer.setPixelRatio(pixelRatioFor());
     composer.setPixelRatio(pixelRatioFor());
+    starUniforms.uPx.value = pixelRatioFor();
     setCanvasHeight();
 }
 
